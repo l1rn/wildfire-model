@@ -43,5 +43,3 @@ def run_gee_pipeline():
         task.start()
         print(f" - Started {name}")
         
-if __name__ == "__main__":
-    run_gee_pipeline()

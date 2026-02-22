@@ -1,5 +1,5 @@
 from src.data import data_loader
-from src.config import DATA_DIR, PROCESSED_DIR
+from src.config import RAW_DIR, PROCESSED_DIR
 import numpy as np
 import pandas as pd
 
@@ -89,12 +89,12 @@ def rasterize_monthly_fire(
 
 def process_data():
     """ Data Integration """
-    dem = data_loader.load_static_raster(f"{DATA_DIR}/khmao_topography.tif")
-    lc = data_loader.load_static_raster(f"{DATA_DIR}/khmao_lc_90m.tif")
-    human_mod = data_loader.load_static_raster(f"{DATA_DIR}/khmao_human_mod_90m.tif")
+    dem = data_loader.load_static_raster(f"{RAW_DIR}/khmao_topography.tif")
+    lc = data_loader.load_static_raster(f"{RAW_DIR}/khmao_lc_90m.tif")
+    human_mod = data_loader.load_static_raster(f"{RAW_DIR}/khmao_human_mod_90m.tif")
     
-    ds: xr.Dataset = data_loader.load_meterological(f"{DATA_DIR}/khmao_era5.nc")
-    firms = data_loader.load_firms(f"{DATA_DIR}/khmao_fire_archive.csv")
+    ds: xr.Dataset = data_loader.load_meterological(f"{RAW_DIR}/khmao_era5.nc")
+    firms = data_loader.load_firms(f"{RAW_DIR}/khmao_fire_archive.csv")
             
     t2m_monthly: xr.Dataset = ds["t2m"].resample(valid_time="1ME").mean()
     d2p_monthly = ds["d2m"].resample(valid_time="1ME").mean()
@@ -139,6 +139,7 @@ def process_data():
         "ghm": human_mod_matched,
         "fire": fire_monthly
     })
+    
     dataset = dataset.to_dataframe()
     dataset = dataset.dropna()
     dataset = dataset.drop(columns=['number', 'spatial_ref'])

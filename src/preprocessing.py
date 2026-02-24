@@ -23,15 +23,19 @@ def dimension_unify_xy(
     t2m: xr.DataArray,
     d2p: xr.DataArray,
     tp: xr.DataArray,
-    vpd: xr.DataArray
+    vpd: xr.DataArray,
+    stl1: xr.DataArray,
+    stl2: xr.DataArray
 ):
     rename_dict = {"latitude": "y", "longitude": "x"}
     t2m = t2m.rename(rename_dict)
     d2p = d2p.rename(rename_dict)
     tp = tp.rename(rename_dict)
     vpd = vpd.rename(rename_dict)
+    stl1 = stl1.rename(rename_dict)
+    stl2 = stl2.rename(rename_dict)
     
-    return t2m, d2p, tp, vpd
+    return t2m, d2p, tp, vpd, stl1, stl2
 
 def broadcast_static_layers(
     main_dim: xr.DataArray,
@@ -97,7 +101,10 @@ def process_data():
     firms = data_loader.load_firms(f"{RAW_DIR}/khmao_fire_archive.csv")
             
     t2m_monthly: xr.Dataset = ds["t2m"].resample(valid_time="1ME").mean()
+    stl1_monthly = ds["stl1"].resample(valid_time="1ME").mean()
+    stl2_monthly = ds["stl2"].resample(valid_time="1ME").mean()
     d2p_monthly = ds["d2m"].resample(valid_time="1ME").mean()
+    
     tp_monthly = ds["tp"].resample(valid_time="1ME").sum()
     tp_monthly_mm = tp_monthly * 1000
     
@@ -106,6 +113,12 @@ def process_data():
     
     d2p_rio: RasterArray = d2p_monthly.rio
     d2p_monthly = d2p_rio.write_crs("EPSG:4326")
+    
+    stl1_rio: RasterArray = stl1_monthly.rio
+    stl1_monthly = stl1_rio.write_crs("EPSG:4326")
+    
+    stl2_rio: RasterArray = stl2_monthly.rio
+    stl2_monthly = stl2_rio.write_crs("EPSG:4326")
     
     lc_rio: RasterArray = lc.rio
     lc_matched = lc_rio.reproject_match(t2m_monthly).squeeze("band", drop=True)
@@ -118,8 +131,8 @@ def process_data():
 
     vpd_monthly: RasterArray = calculate_vpd(t2m_monthly, d2p_monthly)
 
-    t2m_monthly, d2p_monthly, tp_monthly_mm, vpd_monthly = dimension_unify_xy(
-        t2m=t2m_monthly, d2p=d2p_monthly, tp=tp_monthly_mm, vpd=vpd_monthly
+    t2m_monthly, d2p_monthly, tp_monthly_mm, vpd_monthly, stl1_monthly, stl2_monthly = dimension_unify_xy(
+        t2m=t2m_monthly, d2p=d2p_monthly, tp=tp_monthly_mm, vpd=vpd_monthly, stl1=stl1_monthly, stl2=stl2_monthly
     )
     
     dem_matched, lc_matched, human_mod_matched = broadcast_static_layers(
@@ -135,6 +148,8 @@ def process_data():
         "vpd": vpd_monthly,
         "precip": tp_monthly_mm,
         "dem": dem_matched,
+        "soil1": stl1_monthly,
+        "soil2": stl2_monthly,
         "landcover": lc_matched,
         "ghm": human_mod_matched,
         "fire": fire_monthly

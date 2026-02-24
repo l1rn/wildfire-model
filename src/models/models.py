@@ -16,7 +16,7 @@ def get_xgboost(scale_pos_weight):
 def get_random_forest():
     return RandomForestClassifier(
         n_estimators=200,
-        max_depth=15,
+        max_depth=6,
         class_weight="balanced",
         n_jobs=-1,
         random_state=42

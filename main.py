@@ -5,27 +5,13 @@ import sys
 def main():
     try:
         ans = process_manager.choose_option()
+        if ans == 0:
+            sys.exit(0)
+            
         process_manager.choose_sub_option(ans)
-        # main_model = train_model(
-        #     model=xgb, X_train=X_train, y_train=y_train
-        # )
-        
-        # probs = evaluate_model(
-        #     model=main_model, X_test=X_train, y_test=y_train, features=features1
-        # )
-        
-        # future = generate_forecast(
-        #     model=main_model, df=future, features=features1
-        # )
-
-        # maps.plot_month_map(
-        #     future,
-        #     year=2026,
-        #     month=1,
-        #     title="Wildfire Forecast – January 2026",
-        #     save_path="wildfire_risk_jan_2026.jpg"
-        # )
-        # print("=== Random Forest ===")
+    except KeyboardInterrupt:
+        print("Interrupted signal by keyboard")
+        sys.exit(1)
     finally:
         print("Cleaning processes")
 if __name__ == "__main__":

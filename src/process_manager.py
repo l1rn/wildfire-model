@@ -4,6 +4,7 @@ from src.collection import gee_extractor
 from src.models import cross_validation, models
 from src.features import features as ft
 from src.models import train as tr
+from src.visualization import maps
 import src.preprocessing as preprocessing
 
 from xgboost import XGBClassifier
@@ -12,7 +13,7 @@ def build_xgb(train):
     scale_pos_weight = len(train) / train["fire"].sum()
     return models.get_xgboost(scale_pos_weight) 
 
-dict = {1: "raw", 2: "preprocessing", 3: "extract data", 4: "testing the model" }
+dict = {1: "raw", 2: "preprocessing", 3: "extract data", 4: "testing the model", 0: "exit"}
 
 def show_era5_head():
     print("Showing era5 head...")
@@ -43,7 +44,7 @@ def process_and_upload():
     ds = preprocessing.process_data()
     preprocessing.upload_dataset_to_parquet(ds)
     
-def check_cross_validation():
+def summarize_cv():
     df = data_loader.load_master_dataset()
     print("Loaded: ", df.shape)
     
@@ -55,6 +56,8 @@ def check_cross_validation():
         "precip",
         "vpd_ghm_interaction",
         "dem",
+        "soil1",
+        "soil2",
         "landcover",
         "ghm",
     ]
@@ -65,32 +68,50 @@ def check_cross_validation():
         build_xgb
     )
 
-def visualize_map():
+def roc_auc_and_visualize_map():
     df = data_loader.load_master_dataset()
     print("Loaded: ", df.shape)
     
-    df = ft.prepare_features(df)
-    train, test, future = split.temporal_split(df)
-    
     features= [
-        "temp",
-        "vpd",
-        "precip",
-        "vpd_ghm_interaction",
         "dem",
         "landcover",
         "ghm",
+        "soil1",
+        "soil2"
     ]
+    
+    df = ft.prepare_features(df)
+    
+    ans = int(input("Use lag features(yes - 1 / no - 0): "))
+    if ans == 1:
+        features.append("temp_lag2")
+        features.append("vpd_lag2")
+        features.append("precip_lag2")
+        features.append("vpd_ghm_interaction_lag2")
+    elif ans == 0:
+        features.append("temp")
+        features.append("vpd")
+        features.append("precip")
+    
+    train, test = split.temporal_split(df)
+    
     X_train = train[features]
     y_train = train["fire"]
     
     X_test = test[features]
     y_test = test["fire"]
     
-    rf = models.get_random_forest()
-    model = tr.train_model(rf, X_train, y_train)
+    xgb = models.get_xgboost(len(train) / train["fire"].sum())
+    model = tr.train_model(xgb, X_train, y_train)
     probs = tr.evaluate_model(model, X_test, y_test, features)
-    print(probs)
+    
+    test["fire_probability"] = probs
+    maps.plot_month_map(
+        test,
+        year=2025,
+        month=7,
+        title="Wildfire Forecast – January 2025",
+    )
     
 options = {
 1: {
@@ -107,14 +128,14 @@ options = {
     1: gee_extractor.run_gee_pipeline
 },
 4: {
-    1: check_cross_validation,
-    2: visualize_map
+    1: summarize_cv,
+    2: roc_auc_and_visualize_map
 }}
     
 def choose_option():
     print("=== Choose the option ===")
     for i, j in dict.items():
-        print(i, j)
+        print(f"{i}: {j}")
         
     return int(input("ans: "))
     
@@ -129,6 +150,7 @@ def choose_sub_option(ans):
         print(f"{key}: {sub_options[key].__name__}")
 
     sub_ans = int(input("ans: "))
+
     action = sub_options.get(sub_ans)
     if action:
         action()

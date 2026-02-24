@@ -4,7 +4,7 @@ from src.collection import gee_extractor
 from src.models import cross_validation, models
 from src.features import features as ft
 from src.models import train as tr
-from src.visualization import maps
+from src.visualization import maps 
 import src.preprocessing as preprocessing
 
 from xgboost import XGBClassifier
@@ -51,9 +51,9 @@ def summarize_cv():
     df = ft.prepare_features(df)
     
     features= [
-        "temp",
-        "vpd",
-        "precip",
+        "temp_lag2",
+        "vpd_lag2",
+        "precip_lag2",
         "vpd_ghm_interaction",
         "dem",
         "soil1",
@@ -69,6 +69,16 @@ def summarize_cv():
     )
 
 def roc_auc_and_visualize_map():
+    model_options = {
+        1: ("XGBoost", models.get_xgboost),
+        2: ("Random Forest", models.get_random_forest),
+        3: ("Random Forest Search", models.get_random_forest_search)
+    }
+    print("\nChoose the model to execute:\n")
+    for key, (name, _) in model_options.items():
+        print(f"{key}. {name}")
+    
+    
     df = data_loader.load_master_dataset()
     print("Loaded: ", df.shape)
     
@@ -92,8 +102,9 @@ def roc_auc_and_visualize_map():
         features.append("temp")
         features.append("vpd")
         features.append("precip")
+        features.append("vpd_ghm_interaction")
     
-    train, test = split.temporal_split(df)
+    train, test, future = split.temporal_split(df)
     
     X_train = train[features]
     y_train = train["fire"]
@@ -106,11 +117,13 @@ def roc_auc_and_visualize_map():
     probs = tr.evaluate_model(model, X_test, y_test, features)
     
     test["fire_probability"] = probs
+    tr.explain_model_with_shap(model, X_test)
+    
     maps.plot_month_map(
-        test,
+        future,
         year=2025,
         month=7,
-        title="Wildfire Forecast – January 2025",
+        title="Wildfire Forecast – July 2025",
     )
     
 options = {
@@ -129,7 +142,7 @@ options = {
 },
 4: {
     1: summarize_cv,
-    2: roc_auc_and_visualize_map
+    2: xgb_roc_auc_and_visualize_map,
 }}
     
 def choose_option():

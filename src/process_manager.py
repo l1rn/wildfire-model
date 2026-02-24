@@ -2,9 +2,9 @@ from src.data import data_loader, split
 from src.config import PROCESSED_DIR, RAW_DIR
 from src.collection import gee_extractor
 from src.models import cross_validation, models
-from src.features import features as ft
-from src.models import train as tr
-from src.visualization import maps 
+from src.cli import menu
+from src.pipelines.wildfire_pipeline import WildfirePipeline
+
 import src.preprocessing as preprocessing
 
 from xgboost import XGBClassifier
@@ -48,7 +48,7 @@ def summarize_cv():
     df = data_loader.load_master_dataset()
     print("Loaded: ", df.shape)
     
-    df = ft.prepare_features(df)
+    df = data_loader.prepare_features(df)
     
     features= [
         "temp_lag2",
@@ -68,63 +68,12 @@ def summarize_cv():
         build_xgb
     )
 
-def roc_auc_and_visualize_map():
-    model_options = {
-        1: ("XGBoost", models.get_xgboost),
-        2: ("Random Forest", models.get_random_forest),
-        3: ("Random Forest Search", models.get_random_forest_search)
-    }
-    print("\nChoose the model to execute:\n")
-    for key, (name, _) in model_options.items():
-        print(f"{key}. {name}")
-    
-    
-    df = data_loader.load_master_dataset()
-    print("Loaded: ", df.shape)
-    
-    features= [
-        "dem",
-        "landcover",
-        "ghm",
-        "soil1",
-        "soil2"
-    ]
-    
-    df = ft.prepare_features(df)
-    
-    ans = int(input("Use lag features(yes - 1 / no - 0): "))
-    if ans == 1:
-        features.append("temp_lag2")
-        features.append("vpd_lag2")
-        features.append("precip_lag2")
-        features.append("vpd_ghm_interaction_lag2")
-    elif ans == 0:
-        features.append("temp")
-        features.append("vpd")
-        features.append("precip")
-        features.append("vpd_ghm_interaction")
-    
-    train, test, future = split.temporal_split(df)
-    
-    X_train = train[features]
-    y_train = train["fire"]
-    
-    X_test = test[features]
-    y_test = test["fire"]
-    
-    xgb = models.get_xgboost(len(train) / train["fire"].sum())
-    model = tr.train_model(xgb, X_train, y_train)
-    probs = tr.evaluate_model(model, X_test, y_test, features)
-    
-    test["fire_probability"] = probs
-    tr.explain_model_with_shap(model, X_test)
-    
-    maps.plot_month_map(
-        future,
-        year=2025,
-        month=7,
-        title="Wildfire Forecast – July 2025",
-    )
+def wildfire_pipeline():
+    model_name, factory = menu.choose_model()
+    use_lag = int(input("Use lag features(yes - 1 / no - 0): "))
+        
+    pipeline = WildfirePipeline(factory, use_lag)
+    pipeline.run()
     
 options = {
 1: {
@@ -142,7 +91,7 @@ options = {
 },
 4: {
     1: summarize_cv,
-    2: xgb_roc_auc_and_visualize_map,
+    2: wildfire_pipeline,
 }}
     
 def choose_option():

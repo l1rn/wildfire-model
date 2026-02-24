@@ -15,7 +15,7 @@ def get_xgboost(scale_pos_weight):
         random_state=42
     )
     
-def get_random_forest():
+def get_random_forest(tr):
     return RandomForestClassifier(
         n_estimators=200,
         max_depth=6,
@@ -24,7 +24,7 @@ def get_random_forest():
         random_state=42
     )
 
-def get_random_forest_search():
+def get_random_forest_search(tr):
     model = RandomForestClassifier(
         class_weight="balanced",
         n_jobs=-1,
@@ -34,8 +34,8 @@ def get_random_forest_search():
     param_dist = {
         "n_estimators": randint(100, 500),
         "max_depth": randint(3, 20),
-        "min_sample_split": randint(2, 15),
-        "min_sample_leaf": randint(1, 10)
+        "min_samples_split": randint(2, 15),
+        "min_samples_leaf": randint(1, 10)
     }
     
     return RandomizedSearchCV(
@@ -44,6 +44,6 @@ def get_random_forest_search():
         n_iter=20,
         cv=5,
         scoring="f1",
-        random_state="42",
+        random_state=42,
         n_jobs=-1
     )

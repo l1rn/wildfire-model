@@ -1,13 +1,11 @@
-from src.data import data_loader, split
+from src.data import data_loader
 from src.config import PROCESSED_DIR, RAW_DIR
-from src.collection import gee_extractor
+from src.collection import GeeExtractor
 from src.models import cross_validation, models
 from src.cli import menu
-from src.pipelines.wildfire_pipeline import WildfirePipeline
+from src.pipelines import WildfirePipeline
 
 import src.preprocessing as preprocessing
-
-from xgboost import XGBClassifier
 
 def build_xgb(train):
     scale_pos_weight = len(train) / train["fire"].sum()
@@ -19,6 +17,13 @@ def show_era5_head():
     print("Showing era5 head...")
     df = data_loader.load_meterological(f"{RAW_DIR}/khmao_era5.nc")
     print(df.head())
+    
+def show_master_table():
+    import pandas as pd
+    df = data_loader.load_master_dataset()
+    df = df.loc[:, ~df.columns.str.contains("^index")]
+    df: pd.DataFrame = df.loc[:, ~df.columns.str.contains("^level_0")]
+    print(df.columns)
     
 def show_fire_archive_head():
     print("Showing fire archive head...")
@@ -74,6 +79,10 @@ def wildfire_pipeline():
         
     pipeline = WildfirePipeline(factory, use_lag)
     pipeline.run()
+
+def execute_modis_pipeline():
+    collection = GeeExtractor()
+    collection.run()
     
 options = {
 1: {
@@ -81,13 +90,14 @@ options = {
     2: show_fire_archive_head,
     3: show_ghm_info,
     4: show_topography_info,
-    5: show_landcover_info
+    5: show_landcover_info,
+    6: show_master_table
 },
 2: {
     1: process_and_upload,
 },
 3: {
-    1: gee_extractor.run_gee_pipeline
+    1: execute_modis_pipeline,
 },
 4: {
     1: summarize_cv,

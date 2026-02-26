@@ -12,10 +12,12 @@ class WildfirePipeline:
         
     def load_data(self):
         df = data_loader.load_master_dataset()
+        df = df.loc[:, ~df.columns.str.contains("^index")]
+        df = df.loc[:, ~df.columns.str.contains("^level_0")]
         return data_loader.prepare_features(df)
     
     def build_features(self):
-        base = ["dem", "landcover", "ghm", "soil1", "soil2"]
+        base = ["dem", "landcover", "ghm", "pev"]
         
         if self.use_lag:
             extra = [
@@ -43,11 +45,18 @@ class WildfirePipeline:
         X_test = test[self.features]
         y_test = test["fire"]
         
-        self.model = self.model_factory(train)
+        if "xgboost" in self.model_factory.__name__:
+            neg = (y_train == 0).sum()
+            pos = (y_train == 1).sum()
+            scale_pos_weight = neg / pos if pos > 0 else 1
+            
+            self.model = self.model_factory(scale_pos_weight)
+        else:
+            self.model = self.model_factory()
         
         model = tr.train_model(self.model, X_train, y_train)
         probs = tr.evaluate_model(model, X_test, y_test, self.features)
-        
+        test = test.copy()
         test["fire_probability"] = probs
         return model, test
     

@@ -41,19 +41,26 @@ def generate_forecast(
     return df
 
 def explain_model_with_shap(model, X_test):
+    if hasattr(model, "best_estimator_"):
+        model = model.best_estimator_
+    
+    X_test = X_test.copy()
     explainer = shap.TreeExplainer(model)
     
-    X_sample = X_test.sample(min(2000, len(X_test)), random_state=42)
-    shap_values = explainer.shap_values(X_sample)
+    X_sample = X_test.sample(min(500, len(X_test)), random_state=42)
+    shap_values = explainer(X_sample)
     
-    plt.figure(figsize=(10, 6))
+    if len(shap_values.values.shape) == 3:
+        shap_values = shap_values[:, :, 1]
+    
+    plt.figure()
     shap.summary_plot(shap_values, X_sample, show=False)
     plt.title("SHAP Feature Importance (Impact on Model Output)")
     plt.savefig("shap_summary_plot.png", bbox_inches='tight', dpi=300)
     plt.close()
     
-    plt.figure(figsize=(10, 6))
-    shap.plots.bar(explainer(X_sample), show=False)
+    plt.figure()
+    shap.plots.bar(shap_values, show=False)
     plt.savefig("shap_bar_plot.png", bbox_inches='tight', dpi=300)
     plt.close()
 

@@ -17,7 +17,7 @@ class WildfirePipeline:
         return data_loader.prepare_features(df)
     
     def build_features(self):
-        base = ["dem", "landcover", "ghm", "pev"]
+        base = ["dem", "landcover", "ghm", "slope", "sm1"]
         
         if self.use_lag:
             extra = [
@@ -68,9 +68,18 @@ class WildfirePipeline:
             month=7,
             title="Wildfire Forecast – July 2025",
         )
+        
+    def save(self, test):
+        maps.save_to_geotiff(
+            test,
+            year=2025,
+            month=7,
+            filename="khmao.tif"
+        )
                 
     def run(self):
         df = self.load_data()
         self.build_features()
         model, test = self.train(df)
-        self.visualize(model, test)
+        # self.visualize(model, test)
+        self.save(test)

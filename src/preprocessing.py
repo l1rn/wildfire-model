@@ -124,8 +124,8 @@ def process_data():
     human_mod_rio: RasterArray = human_mod_ds.rio
     human_mod_matched = human_mod_rio.reproject_match(t2m_monthly).squeeze("band", drop=True)
     
-    dem_matched = topo_ds.sel(band=1).rio.reproject_match(t2m_monthly)
-    slope_matched = topo_ds.sel(band=2).rio.reproject_match(t2m_monthly)
+    dem_matched = topo_ds.sel(band=1).rio.reproject_match(t2m_monthly).drop_vars("band", errors="ignore")
+    slope_matched = topo_ds.sel(band=2).rio.reproject_match(t2m_monthly).drop_vars("band", errors="ignore")
     
     lc_matched = lc_rio.reproject_match(t2m_monthly).squeeze("band", drop=True).drop_vars("band", errors="ignore")
     human_mod_matched = human_mod_rio.reproject_match(t2m_monthly).squeeze("band", drop=True).drop_vars("band", errors="ignore")
@@ -168,11 +168,9 @@ def process_data():
     })
     
     khmao_boundary = gpd.read_file(f"{RAW_DIR}/khmao.geojson")
-    dataset: RasterArray = dataset.rio
     
-    dataset = dataset.write_crs("EPSG:4326")
-    
-    dataset = dataset.rio.clip(khmao_boundary, khmao_boundary.crs, drop=True)
+    dataset = dataset.rio.write_crs("EPSG:4326")
+    dataset = dataset.rio.clip(khmao_boundary.geometry, khmao_boundary.crs, drop=True)
     
     dataset = dataset.to_dataframe()
     dataset = dataset.dropna()

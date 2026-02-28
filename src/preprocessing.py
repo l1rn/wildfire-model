@@ -32,7 +32,7 @@ def dimension_unify_xy(
     d2p = d2p.rename(rename_dict)
     tp = tp.rename(rename_dict)
     vpd = vpd.rename(rename_dict)
-    sm1 = sm1.rename(sm1)
+    sm1 = sm1.rename(rename_dict)
     
     return t2m, d2p, tp, vpd, sm1
 
@@ -88,8 +88,8 @@ def rasterize_monthly_fire(
         dims=("valid_time", "y", "x"),
         coords={
             "valid_time": climate_da.valid_time,
-            "y": template.y,
-            "x": template.x,
+            "y": climate_da.y,
+            "x": climate_da.x,
         }
     )
 
@@ -126,6 +126,9 @@ def process_data():
     
     dem_matched = topo_ds.sel(band=1).rio.reproject_match(t2m_monthly)
     slope_matched = topo_ds.sel(band=2).rio.reproject_match(t2m_monthly)
+    
+    lc_matched = lc_rio.reproject_match(t2m_monthly).squeeze("band", drop=True).drop_vars("band", errors="ignore")
+    human_mod_matched = human_mod_rio.reproject_match(t2m_monthly).squeeze("band", drop=True).drop_vars("band", errors="ignore")
 
     vpd_monthly: RasterArray = calculate_vpd(t2m_monthly, d2p_monthly)
 
@@ -149,16 +152,19 @@ def process_data():
         firms_gdf=firms, climate_da=t2m_monthly
     )
     
+    def align(da, target):
+        return da.assign_coords(y=target.y, x = target.x)
+    
     dataset = xr.Dataset({
         "temp": t2m_monthly,
-        "vpd": vpd_monthly,
-        "precip": tp_monthly_mm,
-        "dem": dem_matched,
-        "slope": slope_matched,
-        "sm1": sm1_monthly,
-        "landcover": lc_matched,
-        "ghm": human_mod_matched,
-        "fire": fire_monthly
+        "vpd": align(vpd_monthly, t2m_monthly),
+        "precip": align(tp_monthly_mm, t2m_monthly),
+        "dem": align(dem_matched, t2m_monthly),
+        "slope": align(slope_matched, t2m_monthly),
+        "sm1": align(sm1_monthly, t2m_monthly),
+        "landcover": align(lc_matched, t2m_monthly),
+        "ghm": align(human_mod_matched, t2m_monthly),
+        "fire": align(fire_monthly, t2m_monthly)
     })
     
     khmao_boundary = gpd.read_file(f"{RAW_DIR}/khmao.geojson")
@@ -166,7 +172,7 @@ def process_data():
     
     dataset = dataset.write_crs("EPSG:4326")
     
-    dataset = dataset.clip(khmao_boundary, khmao_boundary.crs, drop=True)
+    dataset = dataset.rio.clip(khmao_boundary, khmao_boundary.crs, drop=True)
     
     dataset = dataset.to_dataframe()
     dataset = dataset.dropna()

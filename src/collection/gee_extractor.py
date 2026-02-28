@@ -12,21 +12,37 @@ class GeeExtractor:
             ee.Authenticate()
             ee.Initialize(project=self.project_name)
             
-        self.bbox = ee.Geometry.BBox(59.0, 59.0, 78.0, 64.0)
+        self.bbox = ee.Geometry.BBox(59.0, 58.0, 86.0, 65.8)
             
     def run_gee_pipeline(self):
         lc = ee.Image("ESA/WorldCover/v100/2020").clip(self.bbox).uint8()
 
-        dem = ee.Image("USGS/SRTMGL1_003").clip(self.bbox)
-        terrain = ee.Terrain.products(dem) \
-            .select(['elevation', 'slope']).clip(self.bbox).float()
+        dem_col = ee.ImageCollection("COPERNICUS/DEM/GLO30") \
+            .filterBounds(self.bbox) \
+           
+        native_proj = dem_col \
+            .first() \
+            .select('DEM') \
+            .projection() 
+            
+        dem = dem_col \
+            .mosaic() \
+            .setDefaultProjection(native_proj) \
+            .clip(self.bbox)
+            
+        ds = dem.select('DEM')
+            
+        terrain = ee.Terrain.products(ds) \
+            .select(['DEM', 'slope']) \
+            .rename(['elevation', 'slope']) \
+            .float()
         
         ghm = ee.Image("CSP/HM/GlobalHumanModification/2016") \
             .select('gHM').clip(self.bbox)
             
         export_params = {
             'region': self.bbox.getInfo()['coordinates'],
-            'scale': 90,
+            'scale': 1000,
             'crs': 'EPSG:4326',
             'fileFormat': 'GeoTIFF',
             'maxPixels': 1e9,
@@ -34,17 +50,15 @@ class GeeExtractor:
         }
         
         layers = {
-            'Landcover': lc,
             'Terrain': terrain,
-            'Human_Mod': ghm,
         }
         
         print("Submitting tasks to GEE")
         for name, image in layers.items():
             task = ee.batch.Export.image.toDrive(
                 image=image,
-                description=f'KHMAO_{name}_90m',
-                fileNamePrefix=f'khmao_{name}_90m',
+                description=f'KHMAO_{name}_1km',
+                fileNamePrefix=f'khmao_{name}_1km',
                 **export_params
             )
             task.start()
@@ -56,28 +70,55 @@ class GeeExtractor:
         
         years = ee.List.sequence(start_year, end_year)
         months = ee.List.sequence(1, 12)
-        modis = ee.ImageCollection("MODIS/061/MOD13A1") \
-            .select(['NDVI', 'EVI']) \
-            .filterDate('2016-01-01', '2026-01-01') \
-            .filterBounds(self.bbox)
-            
-        modis_image = modis.mean().multiply(0.0001)
         
-        export_params = {
-            'region': self.bbox.getInfo()['coordinates'],
-            'crs': 'EPSG:4326',
-            'maxPixels': 1e9,
-            'folder': 'GEE_KHMAO_RAW'
-        }
-        print("Submitting the task to GEE")
+        def make_monthly(y):
+            y = ee.Number(y)
+            
+            def make_image(m):
+                m = ee.Number(m)
+                start = ee.Date.fromYMD(y, m, 1)
+                end = start.advance(1, 'month')
+                
+                collection = (
+                    ee.ImageCollection("MODIS/061/MOD13A1")
+                    .filterDate(start, end)
+                    .filterBounds(self.bbox)
+                    .select('NDVI')
+                )
+                
+                count = collection.size()
+                image = ee.Image(
+                    ee.Algorithms.If(
+                        count.gt(0),
+                        collection.mean().multiply(0.0001).toFloat(),
+                        ee.Image(0).constant(-9999).toFloat()
+                    )
+                ).clip(self.bbox)
+                
+                band_name = ee.String('NDVI_') \
+                    .cat(y.int().format()) \
+                    .cat('_') \
+                    .cat(m.format("%02d"))
+            
+                return image.rename([band_name])
+            return months.map(make_image)
+        monthly_images = years.map(make_monthly).flatten()
+        monthly_collection = ee.ImageCollection(monthly_images)
+        
+        stacked_image = monthly_collection.toBands()
+        print("Submitting single multiband export...")  
         task = ee.batch.Export.image.toDrive(
-            image=modis_image,
-            description=f'KHMAO_MOD13A1_90m',
-            fileNamePrefix=f'khmao_mod13a1_90m',
-            **export_params
+            image=stacked_image,
+            description='KHMAO_NDVI_monthly_2016_2026',
+            fileNamePrefix='khmao_ndvi_monthly_2016_2026',
+            region=self.bbox,
+            scale=500,
+            crs='EPSG:4326',
+            maxPixels=1e13,
+            folder='GEE_KHMAO_RAW'
         )
         task.start()
-        print("- Modis Task Started")
+        print("Monthly multiband export started")
         
     def run(self):
         self.initialize()    
@@ -85,4 +126,4 @@ class GeeExtractor:
         if ans == 0:
             self.run_gee_pipeline()
         elif ans == 1:
-            self.run_modis_pipeline()
+            self.monthly_image()

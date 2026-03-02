@@ -40,6 +40,26 @@ class GeeExtractor:
         ghm = ee.Image("CSP/HM/GlobalHumanModification/2016") \
             .select('gHM').clip(self.bbox)
             
+        ogim = ee.FeatureCollection("EDF/OGIM/current") \
+            .filterBounds(self.bbox)
+            
+        dist_oil_gas = ogim.distance(100000) \
+            .clip(self.bbox) \
+            .divide(1000).rename('dist_oil_gas_km').float()
+            
+        grip_asia = ee.FeatureCollection("projects/sat-io/open-datasets/GRIP4/Middle-East-Central-Asia")
+        roads = grip_asia.filterBounds(self.bbox)
+        roads_count = roads.reduceToImage([], ee.Reducer.countEvery()).unmask(0)
+        road_density = roads_count.focalMean(radius=5000, units='meters') \
+            .rename("road_density_5km").float()
+        
+        peat = ee.Image("projects/sat-io/open-datasets/ML-GLOBAL-PEATLAND-EXTENT") \
+            .clip(self.bbox).rename("peatland_flag").unmask()
+            
+        pop_density = ee.ImageCollection("JRC/GHSL/P2023A/GHS_POP") \
+            .sort('system:time_start', False) \
+            .first().rename("pop_density").clip(self.bbox)
+            
         export_params = {
             'region': self.bbox.getInfo()['coordinates'],
             'scale': 1000,
@@ -50,7 +70,7 @@ class GeeExtractor:
         }
         
         layers = {
-            'Terrain': terrain,
+            'PopDensity': pop_density
         }
         
         print("Submitting tasks to GEE")

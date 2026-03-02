@@ -31,7 +31,6 @@ class WildfirePipeline:
                 "temp",
                 "vpd",
                 "precip",
-                "vpd_ghm_interaction",
             ]
             
         self.features = base + extra

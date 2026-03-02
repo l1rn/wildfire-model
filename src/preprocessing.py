@@ -20,21 +20,11 @@ def calculate_vpd(t2m_k, d2m_k):
     ea = 610.78 * np.exp((17.2694 * d_c) / (d_c + 237.3))
     return es - ea
 
-def dimension_unify_xy(
-    t2m: xr.DataArray,
-    d2p: xr.DataArray,
-    tp: xr.DataArray,
-    vpd: xr.DataArray,
-    sm1: xr.DataArray
-):
-    rename_dict = {"latitude": "y", "longitude": "x"}
-    t2m = t2m.rename(rename_dict)
-    d2p = d2p.rename(rename_dict)
-    tp = tp.rename(rename_dict)
-    vpd = vpd.rename(rename_dict)
-    sm1 = sm1.rename(rename_dict)
-    
-    return t2m, d2p, tp, vpd, sm1
+def unify_xy(*arrays):
+    return [da.rename({"latitude": "y", "longitude": "x"}) for da in arrays]
+
+def write_crs_all(crs, *arrays):
+    return [da.rio.write_crs(crs) for da in arrays]
 
 def broadcast_static_layers(
     main_dim: xr.DataArray,
@@ -60,24 +50,25 @@ def rasterize_monthly_fire(
     climate_da: xr.DataArray
 ):
     template = climate_da.isel(valid_time=0)
-    fire_rasters = []
-    template_rio: RasterArray = template.rio
+    transform = template.rio.transform()    
     
+    grouped = firms_gdf.groupby("year_month")
+    fire_rasters = []
     for time in tqdm(climate_da.valid_time.values, desc="Rasterizing Fire Data"):
         month = pd.to_datetime(time).to_period("M")
-        monthly_fires = firms_gdf[firms_gdf["year_month"] == month]
-        if len(monthly_fires) == 0:
-            fire_array = np.zeros(template.shape, dtype=np.uint8)
-        else:
+        if month in grouped.groups:
+            monthly_fires = grouped.get_group(month)
             shapes = [(geom, 1) for geom in monthly_fires.geometry]
             
             fire_array = rasterize(
                 shapes,
                 out_shape=template.shape,
-                transform=template_rio.transform(),
+                transform=transform,
                 fill=0,
                 dtype=np.uint8
             )
+        else:
+            fire_array = np.zeros(template.shape, dtype=np.uint8)
             
         fire_rasters.append(fire_array)
         
@@ -90,81 +81,79 @@ def rasterize_monthly_fire(
             "valid_time": climate_da.valid_time,
             "y": climate_da.y,
             "x": climate_da.x,
-        }
+        },
+        name="file"
     )
 
 def process_data():
     """ Data Integration """
-    topo_ds = data_loader.load_static_raster(f"{RAW_DIR}/khmao_terrain_1km.tif")
-    lc_ds = data_loader.load_static_raster(f"{RAW_DIR}/khmao_lc_1km.tif")
-    human_mod_ds = data_loader.load_static_raster(f"{RAW_DIR}/khmao_human_mod_1km.tif")
-    
+    topo = data_loader.load_static_raster(f"{RAW_DIR}/khmao_terrain_1km.tif")
+    lc = data_loader.load_static_raster(f"{RAW_DIR}/khmao_lc_1km.tif")
+    ghm = data_loader.load_static_raster(f"{RAW_DIR}/khmao_human_mod_1km.tif")
     ds: xr.Dataset = data_loader.load_meterological(f"{RAW_DIR}/khmao_era5.nc")
     firms = data_loader.load_firms(f"{RAW_DIR}/khmao_fire_archive.csv")
-            
-    t2m_monthly: xr.Dataset = ds["t2m"].resample(valid_time="1ME").mean()
-    d2p_monthly: xr.Dataset = ds["d2m"].resample(valid_time="1ME").mean()
-    sm1_monthly: xr.Dataset = ds["swvl1"].resample(valid_time="1ME").mean()
     
-    tp_monthly = ds["tp"].resample(valid_time="1ME").sum()
-    tp_monthly_mm = tp_monthly * 1000
+    monthly = ds.resample(valid_time="1ME").mean()
     
-    t2m_rio: RasterArray = t2m_monthly.rio
-    t2m_monthly = t2m_rio.write_crs("EPSG:4326")
+    t2m = monthly["t2m"]
+    d2m = monthly["d2m"]
+    u10 = monthly["u10"]
+    v10 = monthly["v10"]
+    sm1 = monthly["swvl1"]
+    tp = ds["tp"].resample(valid_time="1ME").sum() * 1000
     
-    d2p_rio: RasterArray = d2p_monthly.rio
-    d2p_monthly = d2p_rio.write_crs("EPSG:4326")
-    
-    sm1_rio: RasterArray = sm1_monthly.rio
-    sm1_monthly = sm1_rio.write_crs("EPSG:4326")
-    
-    lc_rio: RasterArray = lc_ds.rio
-    lc_matched = lc_rio.reproject_match(t2m_monthly).squeeze("band", drop=True)
-    
-    human_mod_rio: RasterArray = human_mod_ds.rio
-    human_mod_matched = human_mod_rio.reproject_match(t2m_monthly).squeeze("band", drop=True)
-    
-    dem_matched = topo_ds.sel(band=1).rio.reproject_match(t2m_monthly).drop_vars("band", errors="ignore")
-    slope_matched = topo_ds.sel(band=2).rio.reproject_match(t2m_monthly).drop_vars("band", errors="ignore")
-    
-    lc_matched = lc_rio.reproject_match(t2m_monthly).squeeze("band", drop=True).drop_vars("band", errors="ignore")
-    human_mod_matched = human_mod_rio.reproject_match(t2m_monthly).squeeze("band", drop=True).drop_vars("band", errors="ignore")
-
-    vpd_monthly: RasterArray = calculate_vpd(t2m_monthly, d2p_monthly)
-
-    t2m_monthly, d2p_monthly, tp_monthly_mm, vpd_monthly, sm1_monthly = dimension_unify_xy(
-        t2m=t2m_monthly, 
-        d2p=d2p_monthly, 
-        tp=tp_monthly_mm, 
-        vpd=vpd_monthly, 
-        sm1=sm1_monthly
+    t2m, d2m, u10, v10, sm1, tp = write_crs_all(
+        "EPSG:4326",
+        t2m,
+        d2m,
+        u10,
+        v10,
+        sm1,
+        tp
     )
     
-    dem_matched, lc_matched, human_mod_matched, slope_matched = broadcast_static_layers(
-        main_dim=t2m_monthly, 
-        dem=dem_matched, 
-        lc=lc_matched, 
-        ghm=human_mod_matched,
-        slope=slope_matched
+    t2m = t2m.rio.write_crs("EPSG:4326")
+    
+    vpd = calculate_vpd(t2m, d2m)
+    
+    dem = topo.sel(band=1).rio.reproject_match(t2m).drop_vars("band", errors="ignore")
+    slope = topo.sel(band=2).rio.reproject_match(t2m).drop_vars("band", errors="ignore")
+    
+    lc = lc.rio.reproject_match(t2m).squeeze("band", drop=True)
+    ghm = ghm.rio.reproject_match(t2m).squeeze("band", drop=True)
+
+    t2m, d2m, tp, vpd, \
+    sm1, u10, v10 = unify_xy(
+        t2m, d2m, tp, vpd, sm1, u10, v10,
+    )
+    
+    dem, lc, ghm, slope = broadcast_static_layers(
+        main_dim=t2m, 
+        dem=dem, 
+        lc=lc, 
+        ghm=ghm,
+        slope=slope
     )
     
     fire_monthly = rasterize_monthly_fire(
-        firms_gdf=firms, climate_da=t2m_monthly
+        firms_gdf=firms, climate_da=t2m
     )
     
     def align(da, target):
         return da.assign_coords(y=target.y, x = target.x)
     
     dataset = xr.Dataset({
-        "temp": t2m_monthly,
-        "vpd": align(vpd_monthly, t2m_monthly),
-        "precip": align(tp_monthly_mm, t2m_monthly),
-        "dem": align(dem_matched, t2m_monthly),
-        "slope": align(slope_matched, t2m_monthly),
-        "sm1": align(sm1_monthly, t2m_monthly),
-        "landcover": align(lc_matched, t2m_monthly),
-        "ghm": align(human_mod_matched, t2m_monthly),
-        "fire": align(fire_monthly, t2m_monthly)
+        "temp": t2m,
+        "vpd": align(vpd, t2m),
+        "precip": align(tp, t2m),
+        "u10": align(u10, t2m),
+        "v10": align(v10, t2m),
+        "dem": align(dem, t2m),
+        "slope": align(slope, t2m),
+        "sm1": align(sm1, t2m),
+        "landcover": align(lc, t2m),
+        "ghm": align(ghm, t2m),
+        "fire": align(fire_monthly, t2m)
     })
     
     khmao_boundary = gpd.read_file(f"{RAW_DIR}/khmao.geojson")
@@ -172,12 +161,15 @@ def process_data():
     dataset = dataset.rio.write_crs("EPSG:4326")
     dataset = dataset.rio.clip(khmao_boundary.geometry, khmao_boundary.crs, drop=True)
     
-    dataset = dataset.to_dataframe()
-    dataset = dataset.dropna()
-    dataset = dataset.drop(columns=['number', 'spatial_ref'], errors='ignore')
-    dataset = dataset.reset_index()
+    df = (
+        dataset
+        .stack(points=("x", "y"))
+        .dropna("points")
+        .to_dataframe()
+        .reset_index()
+    )
     
-    return dataset
+    return df
 
 def upload_dataset_to_parquet(
     ds: pd.DataFrame

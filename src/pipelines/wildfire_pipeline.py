@@ -17,7 +17,18 @@ class WildfirePipeline:
         return data_loader.prepare_features(df)
     
     def build_features(self):
-        base = ["dem", "landcover", "ghm", "slope", "sm1", "u10", "v10"]
+        base = [
+            "dem", 
+            "landcover", 
+            "ghm", 
+            "slope", 
+            "sm1", 
+            "u10", 
+            "v10", 
+            "pop_density", 
+            "dist_oil_gas", 
+            "peatland"
+        ]
         
         if self.use_lag:
             extra = [
@@ -81,4 +92,4 @@ class WildfirePipeline:
         self.build_features()
         model, test = self.train(df)
         self.visualize(model, test)
-        # self.save(test)
+        self.save(test)

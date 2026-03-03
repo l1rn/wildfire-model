@@ -3,6 +3,7 @@ from src.config import RAW_DIR, PROCESSED_DIR
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+import matplotlib.pyplot as plt
 
 from rioxarray.raster_array import RasterArray
 from rasterio.features import rasterize
@@ -120,11 +121,32 @@ def process_data():
         da_matched = da_matched.drop_vars("band", errors="ignore")
         processed_static[name] = da_matched
         
+    for name, da in list(processed_static.items()):
+        nans_before = da.isnull().sum().item()
+        if nans_before > 0:
+            if name in ["slope", "ghm", "dist_oil_gas"]:
+                fill_value = float(da.median())
+                processed_static[name] = da.fillna(fill_value)
+                print(f"  {name}: filled {nans_before} NaNs with median = {fill_value:.2f}")
+            elif name in ["landcover", "peatland"]:
+                fill_value = int(da.mode(dim=["x", "y"].isel(mode=0)))
+                processed_static[name] = da.fillna(fill_value)
+                print(f"  {name}: filled {nans_before} NaNs with median = {fill_value}")
+            else:
+                processed_static[name] = da.fillna(0)
+
+    processed_static["pop_density"] = processed_static["pop_density"].fillna(0)
+    processed_static["dist_oil_gas"] = processed_static["dist_oil_gas"].fillna(processed_static["dist_oil_gas"].max())
+    
+    t2m = t2m.interpolate_na(dim="x", method="nearest")
+    sm1 = sm1.interpolate_na(dim="x", method="nearest")
+    
     broadcast_layers = broadcast_static_layers(t2m, **processed_static)
     
     fire_monthly = rasterize_monthly_fire(
         firms_gdf=firms, climate_da=t2m
     )
+    
     
     def align(da, target):
         return (
@@ -138,6 +160,8 @@ def process_data():
         "vpd": align(vpd, t2m),
         "precip": align(tp, t2m),
         "sm1": align(sm1, t2m),
+        "u10": align(u10, t2m),
+        "v10": align(v10, t2m),
         "fire": align(fire_monthly, t2m)
     }
     
@@ -147,17 +171,22 @@ def process_data():
     dataset = xr.Dataset(dataset_dict)
     
     khmao_boundary = gpd.read_file(f"{RAW_DIR}/khmao.geojson")
-    dataset = dataset.rio.clip(khmao_boundary.geometry, khmao_boundary.crs, drop=True)
+    dataset = dataset.rio.clip(
+        khmao_boundary.geometry, 
+        khmao_boundary.crs, 
+        drop=True,
+        all_touched=True
+    )
     
     df = (
         dataset
         .stack(points=("x", "y", "valid_time"))
-        .dropna("points")
-        .to_dataframe()
-        .reset_index()
+        .dropna("points", how="all")
     )
     
-    return df
+    df_final = df.to_dataframe().reset_index().fillna(0)
+    
+    return df_final
 
 def upload_dataset_to_parquet(
     ds: pd.DataFrame

@@ -17,16 +17,29 @@ def plot_month_map(
     ]
     
     df = df.dropna(subset=["fire_probability"])    
+    
     risk_map = subset.pivot(
         index="y",
         columns="x",
         values="fire_probability"
     )
+    
+    xmin, xmax = risk_map.columns.min(), risk_map.columns.max()
+    ymin, ymax = risk_map.index.min(), risk_map.index.max()
 
-    plt.figure(figsize=(12, 6))
-    plt.imshow(risk_map, origin="lower", vmin=0, vmax=1)
+    plt.figure(figsize=(14, 8))
+    plt.imshow(
+        risk_map.values, 
+        origin="lower",
+        extent=[xmin, xmax, ymin, ymax], 
+        vmin=0, 
+        vmax=1,
+        cmap="plasma"
+    )
     plt.colorbar(label="Wildfire Probability")
     plt.title(title)
+    plt.xlabel("Longitude")
+    plt.ylabel("Latitude")
     plt.tight_layout()
     plt.show()
     

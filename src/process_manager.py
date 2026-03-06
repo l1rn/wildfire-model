@@ -56,15 +56,19 @@ def summarize_cv():
     df = data_loader.prepare_features(df)
     
     features= [
-        "temp_lag2",
-        "vpd_lag2",
-        "precip_lag2",
-        "vpd_ghm_interaction",
-        "dem",
-        "soil1",
-        "soil2",
-        "landcover",
-        "ghm",
+        "temp",
+        "vpd",
+        "precip",
+        "dem", 
+        "landcover", 
+        "ghm", 
+        "slope", 
+        "sm1", 
+        "u10", 
+        "v10", 
+        "pop_density", 
+        "dist_oil_gas", 
+        "peatland"
     ]
     
     cross_validation.temporal_cross_validation(

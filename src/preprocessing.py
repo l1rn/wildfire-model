@@ -143,10 +143,12 @@ def process_data():
     
     broadcast_layers = broadcast_static_layers(t2m, **processed_static)
     
-    fire_monthly = rasterize_monthly_fire(
-        firms_gdf=firms, climate_da=t2m
-    )
+    wildfire = firms[firms['type'] == 0]
+    industrial_heat = firms[firms['type'] == 2]
     
+    fire_monthly = rasterize_monthly_fire(
+        firms_gdf=wildfire, climate_da=t2m
+    )
     
     def align(da, target):
         return (

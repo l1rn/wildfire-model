@@ -1,4 +1,6 @@
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+from scipy.ndimage import gaussian_filter
 import geopandas as gpd
 import pandas as pd
 import xarray as xr
@@ -10,24 +12,45 @@ def plot_month_map(
     year: int,
     month: int,
     title: str,
+    sigma: float = 1.5
 ):
     subset = df[
         (df["valid_time"].dt.year == year) &
         (df["valid_time"].dt.month == month)
-    ]
+    ].copy()
     
-    df = df.dropna(subset=["fire_probability"])    
+    subset["x_rounded"] = subset["x"].round(2)
+    subset["y_rounded"] = subset["y"].round(2)   
     
     risk_map = subset.pivot(
-        index="y",
-        columns="x",
+        index="y_rounded",
+        columns="x_rounded",
         values="fire_probability"
-    )
+    ).fillna(0)
     
+    data_mask = risk_map.notnull()
+    
+    smoothed_values = gaussian_filter(risk_map.values, sigma=sigma)
+
+    colors = ["#228b22", "#ffff00", "#ff8c00", "#ff0000"]
+    levels = [0, 0.2, 0.5, 0.8, 1.0]
+    
+    cmap = mcolors.ListedColormap(colors)
+    cmap.set_bad(color='white', alpha=0)
+    
+    norm = mcolors.BoundaryNorm(levels, cmap.N) 
     xmin, xmax = risk_map.columns.min(), risk_map.columns.max()
     ymin, ymax = risk_map.index.min(), risk_map.index.max()
-
-    plt.figure(figsize=(14, 8))
+    plt.figure(figsize=(14, 8), facecolor='white')
+    im = plt.imshow(
+        smoothed_values, 
+        origin="lower",
+        extent=[xmin, xmax, ymin, ymax], 
+        cmap=cmap,
+        norm=norm,
+        interpolation='bilinear'
+    )
+    
     plt.imshow(
         risk_map.values, 
         origin="lower",
@@ -36,12 +59,20 @@ def plot_month_map(
         vmax=1,
         cmap="plasma"
     )
-    plt.colorbar(label="Wildfire Probability")
-    plt.title(title)
-    plt.xlabel("Longitude")
-    plt.ylabel("Latitude")
+    cbar = plt.colorbar(im, spacing='proportional', shrink=0.7)
+    cbar.set_label("Wildfire Risk Level", fontsize=12, fontweight='bold')
+    cbar.set_ticks([0.1, 0.35, 0.65, 0.9])
+    cbar.set_ticklabels(["Low", "Moderate", "High", "Extreme"])
+
+    plt.title(f"{title}\n(Spatially Smoothed, $\sigma={sigma}$)", fontsize=16, pad=20)
+    plt.xlabel("Longitude", fontsize=10)
+    plt.ylabel("Latitude", fontsize=10)
+    
+    plt.grid(color='black', linestyle='--', linewidth=0.2, alpha=0.5)
+    
     plt.tight_layout()
-    plt.show()
+    plt.savefig(f"fire_risk_{year}_{month}.png", dpi=300)
+    print(f"Map saved as fire_risk_{year}_{month}.png")
     
 def save_to_geotiff(
     df: pd.DataFrame,

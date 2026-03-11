@@ -7,6 +7,8 @@ from src.pipelines import WildfirePipeline
 
 import src.preprocessing as preprocessing
 
+collection = GeeExtractor()
+
 def build_xgb(train):
     scale_pos_weight = len(train) / train["fire"].sum()
     return models.get_xgboost(scale_pos_weight) 
@@ -85,8 +87,10 @@ def wildfire_pipeline():
     pipeline.run()
 
 def execute_modis_pipeline():
-    collection = GeeExtractor()
     collection.run()
+
+def execute_validation():
+    collection.validate_with_sentinel2(f"{RAW_DIR}/validation_sample.csv")
     
 options = {
 1: {
@@ -102,6 +106,7 @@ options = {
 },
 3: {
     1: execute_modis_pipeline,
+    2: execute_validation
 },
 4: {
     1: summarize_cv,

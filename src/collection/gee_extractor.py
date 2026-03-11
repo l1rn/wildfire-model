@@ -1,4 +1,5 @@
 import ee
+import pandas as pd
 
 class GeeExtractor:
     def __init__(self):
@@ -140,6 +141,67 @@ class GeeExtractor:
         task.start()
         print("Monthly multiband export started")
         
+    def validate_with_sentinel2(self, csv_path):
+        self.initialize()    
+        
+        df = pd.read_csv(csv_path)
+        results = []
+        print(f"Starting validatin for {len(df)} points...")
+
+        for index, row in df.iterrows():
+            lon, lat = row['longitude'], row['latitude']
+            date_str = row['acq_date']
+            fire_type = row['type']
+            
+            point = ee.Geometry.Point([lon, lat])
+            
+            roi = point.buffer(2000).bounds()
+            fire_date = ee.Date(date_str)
+            try:
+                s2_col = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED") \
+                    .filterBounds(roi) \
+                    .filterDate(fire_date.advance(-60, 'day'), fire_date.advance(60, 'day')) \
+                    .sort('CLOUDY_PIXEL_PERCENTAGE')
+                    
+                count = s2_col.size().getInfo()
+                if count == 0:
+                    print(f"No imagery found for date {date_str}")
+                    continue
+                    
+                pre = s2_col.filterDate(fire_date.advance(-60, 'day'), fire_date).median()
+                post = s2_col.filterDate(fire_date, fire_date.advance(460, 'day')).median()
+                
+                def get_nbr(img):
+                    return img.normalizedDifference(['B8', 'B12'])
+                
+                nbr_pre = get_nbr(pre)
+                nbr_post = get_nbr(post)
+                dnbr = nbr_pre.subtract(nbr_post)
+
+                rbr = dnbr.divide(nbr_pre.add(1.001).abs().sqrt())
+                burned_mask = rbr.gt(0.1)
+                stats = burned_mask.multiply(ee.Image.pixelArea()).reduceRegion(
+                    reducer=ee.Reducer.sum(),
+                    geometry=roi,
+                    scale=10,
+                    maxPixels=1e9
+                )
+                
+                s2_area_ha = ee.Number(stats.get('nd')).divide(10000).getInfo()
+
+                results.append({
+                    'lat': lat, 'lon': lon, 'date': date_str, 
+                    'viirs_type': fire_type, 's2_burned_ha': s2_area_ha
+                })
+                print(f"[{index}] Type {fire_type} at {date_str}: S2 Area = {s2_area_ha:.2f} ha")
+
+            except Exception as e:
+                print(f"Error at index {index}: {e}")
+                continue
+            
+        res_df = pd.DataFrame(results)
+        res_df.to_csv('validation_results.csv', index=False)
+        return res_df
     def run(self):
         self.initialize()    
         ans = int(input("choose (1 / 0): "))

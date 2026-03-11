@@ -1,10 +1,11 @@
 import pandas as pd
 from xgboost import XGBClassifier
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import roc_auc_score, classification_report, roc_curve, roc_auc_score
+from sklearn.metrics import roc_auc_score, classification_report, roc_curve, roc_auc_score, precision_recall_curve
 from src.config import PROCESSED_DIR
 import matplotlib.pyplot as plt
 import shap
+import numpy as np
 
 def train_model(model, X_train, y_train):
     model.fit(X_train, y_train)
@@ -12,12 +13,33 @@ def train_model(model, X_train, y_train):
 
 def evaluate_model(model, X_test, y_test, features):
     probs = model.predict_proba(X_test)[:, 1]
-    preds = model.predict(X_test)
+    precisions, recalls, thresholds = precision_recall_curve(
+        y_test,
+        probs
+    )
+    
+    f1_scores = np.divide(
+        2 * (precisions * recalls),
+        (precisions + recalls),
+        out=np.zeros_like(precisions),
+        where=(precisions + recalls) != 0
+    )
+    
+    optimal_idx = np.argmax(f1_scores)
+    
+    if optimal_idx < len(thresholds):
+        optimal_threshold = thresholds[optimal_idx]
+    else:
+        optimal_threshold = 0.5
+    
+    print(f"\nOptimal Probability Threshold (Max F1): {optimal_threshold:.4f}")
+    
+    preds_optimized = (probs >= optimal_threshold).astype(int)
     
     auc = roc_auc_score(y_test, probs)
     
     print("ROC-AUC: ", auc)
-    print(classification_report(y_test, preds))
+    print(classification_report(y_test, preds_optimized))
     
     importance = pd.Series(
         model.feature_importances_,

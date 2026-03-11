@@ -50,20 +50,34 @@ class WildfirePipeline:
         self.features = base + extra
         
     def train(self, df):
-        X_train, X_test, y_train, y_test, _, _, _, _ = split.temporal_split()
+        X_train_full, X_test_full, y_train_full, y_test, _, _, _, _ = split.temporal_split(df)       
+        
+        train_df = X_train_full.copy()
+        train_df['fire'] = y_train_full        
+        
+        ones = train_df[train_df['fire'] == 1]
+        zeros = train_df[train_df['fire'] == 0]
+        
+        n_zeros = min(len(ones) * 20, len(zeros))
+        train_zeros_sampled = zeros.sample(n=n_zeros, random_state=42)
+        train_balanced = pd.concat([ones, train_zeros_sampled]).sample(frac=1)
+        
+        X_train = train_balanced[self.features]
+        y_train = train_balanced['fire']
+        
+        X_test = X_test_full[self.features]
         
         if "xgboost" in self.model_factory.__name__:
             scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
-            
             self.model = self.model_factory(scale_pos_weight)
         else:
             self.model = self.model_factory()
-        
+            
         model = tr.train_model(self.model, X_train, y_train)
         probs = model.predict_proba(X_test)[:, 1] 
         tr.evaluate_model(model, X_test, y_test, self.features)
         
-        test_full = X_test.copy()
+        test_full = X_test_full.copy()
         test_full["fire"] = y_test
         test_full["fire_probability"] = probs
         
@@ -97,5 +111,5 @@ class WildfirePipeline:
         df = self.load_data()
         self.build_features()
         model, test = self.train(df)
-        self.visualize(model, test)
-        self.save(test)
+        # self.visualize(model, test)
+        # self.save(test)

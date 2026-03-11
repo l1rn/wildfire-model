@@ -2,9 +2,11 @@ import xarray as xr
 import rioxarray
 import pandas as pd
 import geopandas as gpd
-from src.config import PROCESSED_DIR
+from src.config import Config
 
 from typing import Optional
+
+cfg = Config()
 
 def load_meterological(path: str) -> Optional[xr.Dataset]:
     """Loads ERA5 NetCDF and ensure coordinates are standard."""
@@ -41,7 +43,7 @@ def load_firms(path: str) -> Optional[gpd.GeoDataFrame]:
         return None
     
 def load_master_dataset():
-    df = pd.read_parquet(f"{PROCESSED_DIR}/khmao_master.parquet")
+    df = pd.read_parquet(cfg.processed_table)
     df = df.reset_index()
     df["valid_time"] = pd.to_datetime(df["valid_time"])
     return df

@@ -7,7 +7,7 @@ def temporal_split(
     X = df.drop(columns=['fire'])
     y = df['fire']
     
-    stratify_col = df['fire'].astype(str) + "_" + df['is_extreme_fire'].astype(str)
+    stratify_col = df['fire'].astype(str) + "_" + df['is_extreme_year'].astype(str)
     
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=stratify_col

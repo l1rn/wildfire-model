@@ -35,10 +35,10 @@ class WildfirePipeline:
         
         if self.use_lag:
             extra = [
-                "temp_lag2",
-                "vpd_lag2",
-                "precip_lag2",
-                "vpd_ghm_interaction_lag2",
+                "temp_lag1",
+                "vpd_lag1",
+                "precip_lag1",
+                "vpd_ghm_interaction_lag1",
             ]
         else:
             extra = [
@@ -50,19 +50,7 @@ class WildfirePipeline:
         self.features = base + extra
         
     def train(self, df):
-        train_full, test_full, _ = split.temporal_split(df)
-        
-        ones = train_full[train_full['fire'] == 1]
-        zeros = train_full[train_full['fire'] == 0]
-        
-        train_zeros_sampled = zeros.sample(n=len(ones) * 20, random_state=42)
-        train_balanced = pd.concat([ones, train_zeros_sampled]).sample(frac=1)
-        
-        X_train = train_balanced[self.features]
-        y_train = train_balanced["fire"]
-        
-        X_test = test_full[self.features]
-        y_test = test_full["fire"]
+        X_train, X_test, y_train, y_test, _, _, _, _ = split.temporal_split()
         
         if "xgboost" in self.model_factory.__name__:
             scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
@@ -74,8 +62,11 @@ class WildfirePipeline:
         model = tr.train_model(self.model, X_train, y_train)
         probs = model.predict_proba(X_test)[:, 1] 
         tr.evaluate_model(model, X_test, y_test, self.features)
-        test_full = test_full.copy()
+        
+        test_full = X_test.copy()
+        test_full["fire"] = y_test
         test_full["fire_probability"] = probs
+        
         return model, test_full
     
     def visualize(self, model, df_full):

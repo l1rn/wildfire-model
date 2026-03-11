@@ -47,10 +47,10 @@ def load_master_dataset():
     return df
 
 def create_lag_features(df: pd.DataFrame):
-    df["vpd_lag2"] = df.groupby(["y", "x"])["vpd"].shift(2)
-    df["temp_lag2"] = df.groupby(["y", "x"])["temp"].shift(2)
-    df["precip_lag2"] = df.groupby(["y", "x"])["precip"].shift(2)
-    df["vpd_ghm_interaction_lag2"] = df["vpd_lag2"] * df["ghm"]
+    df["vpd_lag1"] = df.groupby(["y", "x"])["vpd"].shift(1)
+    df["temp_lag1"] = df.groupby(["y", "x"])["temp"].shift(1)
+    df["precip_lag1"] = df.groupby(["y", "x"])["precip"].shift(1)
+    df["vpd_ghm_interaction_lag1"] = df["vpd_lag1"] * df["ghm"]
     df["vpd_ghm_interaction"] = df["vpd"] * df["ghm"]
     df["month"] = df["valid_time"].dt.month
     return df
@@ -60,9 +60,9 @@ def prepare_features(df: pd.DataFrame):
     df = create_lag_features(df)
     
     df = df.dropna(subset=[
-        "temp_lag2",
-        "vpd_lag2",
-        "precip_lag2"
+        "temp_lag1",
+        "vpd_lag1",
+        "precip_lag1"
     ])
     
     return df

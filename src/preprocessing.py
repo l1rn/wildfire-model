@@ -1,17 +1,16 @@
 from src.data import data_loader
-from src.config import RAW_DIR, PROCESSED_DIR
+from src.config import RAW_DIR, PROCESSED_DIR, Config
 import numpy as np
 import pandas as pd
 import geopandas as gpd
-import matplotlib.pyplot as plt
 
-from rioxarray.raster_array import RasterArray
 from rasterio.features import rasterize
 import xarray as xr
 
 from tqdm.auto import tqdm
 
 KELVIN = 273.15
+cfg = Config()
 
 def calculate_vpd(t2m_k, d2m_k):
     t_c = t2m_k - KELVIN
@@ -75,14 +74,14 @@ def rasterize_monthly_fire(
 
 def process_data():
     """ Data Integration """
-    topo = data_loader.load_static_raster(f"{RAW_DIR}/khmao_terrain_1km.tif")
-    lc = data_loader.load_static_raster(f"{RAW_DIR}/khmao_lc_1km.tif")
-    ghm = data_loader.load_static_raster(f"{RAW_DIR}/khmao_human_mod_1km.tif")
-    oil_gas = data_loader.load_static_raster(f"{RAW_DIR}/khmao_oil_gas.tif")
-    peat = data_loader.load_static_raster(f"{RAW_DIR}/khmao_peatland.tif")
-    pop = data_loader.load_static_raster(f"{RAW_DIR}/khmao_pop.tif")
-    ds = data_loader.load_meterological(f"{RAW_DIR}/khmao_era5.nc")
-    firms = data_loader.load_firms(f"{RAW_DIR}/khmao_fire_archive.csv")
+    topo = data_loader.load_static_raster(cfg.raw_dem)
+    lc = data_loader.load_static_raster(cfg.raw_landcover)
+    ghm = data_loader.load_static_raster(cfg.raw_human_mod)
+    oil_gas = data_loader.load_static_raster(cfg.raw_oil_gas)
+    peat = data_loader.load_static_raster(cfg.raw_peatland)
+    pop = data_loader.load_static_raster(cfg.raw_pop_density)
+    ds = data_loader.load_meterological(cfg.raw_weather)
+    firms = data_loader.load_firms(cfg.raw_firms)
     
     monthly = ds.resample(valid_time="1ME").mean()
     
@@ -195,5 +194,15 @@ def upload_dataset_to_parquet(
 ):
     ds["valid_time"] = pd.to_datetime(ds["valid_time"])
     ds["year"] = ds["valid_time"].dt.year
-    ds.to_parquet(f"{PROCESSED_DIR}/khmao_master.parquet", index=True)
+    
+    study_years = cfg.get_study_years()
+    target_years = study_years['anomalous_hot'] + study_years['baseline_cold']
+    
+    ds_filtered = ds[ds["year"].isin(target_years)]
+    
+    ds_filtered['is_extreme_year'] = ds_filtered['year'].apply(
+        lambda y: 1 if y in study_years['anomalous_hot'] else 0
+    )
+    
+    ds_filtered.to_parquet(cfg.processed_table, index=True)
     

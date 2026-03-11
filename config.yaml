@@ -1,19 +1,16 @@
-
-study_area:
-  name: "western_siberia"
-  bbox: [60, 50, 90, 70]
-  crs: "EPSG:4326"
-
-date_range:
-  start: "2021-01-01"
-  end: "2026-01-01"
+study_years:
+  anomalous_hot: [2016, 2020, 2022]
+  baseline_cold: [2017, 2018, 2024]
 
 data_paths:
-  raw_weather: "data/raw/era5_siberia.nc"
-  raw_dem: "data/raw/siberia_dem.tif"
-  raw_landcover: "data/raw/siberia_lc.tif"
-  raw_pop_density: "data/raw/siberia_pop_dencity.tif"
-  raw_firms: "data/raw/firms_points.csv"
+  raw_weather: "data/raw/khmao_era5.nc"
+  raw_dem: "data/raw/khmao_terrain_1km.tif"
+  raw_landcover: "data/raw/khmao_lc_1km.tif"
+  raw_pop_density: "data/raw/khmao_pop.tif"
+  raw_firms: "data/raw/khmao_fire_archive.csv"
+  raw_ghm: "data/raw/khmao_human_mod_1km.tif"
+  raw_peatland: "data/raw/khmao_peatland.tif"
+  raw_oil_gas: "data/raw/khmao_oil_gas.tif"
   processed_table: "data/processed/master_training_data.parquet"
 
 model_params:

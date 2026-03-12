@@ -1,7 +1,16 @@
 import pandas as pd
 from xgboost import XGBClassifier
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import roc_auc_score, classification_report, roc_curve, roc_auc_score, precision_recall_curve
+from sklearn.metrics import (
+    roc_auc_score, 
+    classification_report, 
+    roc_curve, 
+    roc_auc_score, 
+    precision_recall_curve,
+    PrecisionRecallDisplay,
+    ConfusionMatrixDisplay,
+)
+from sklearn.linear_model import LogisticRegression
 from src.config import PROCESSED_DIR
 import matplotlib.pyplot as plt
 import shap
@@ -10,6 +19,58 @@ import numpy as np
 def train_model(model, X_train, y_train):
     model.fit(X_train, y_train)
     return model
+
+def generate_evaluation_artifacts(
+    model,
+    X_train,
+    y_train,
+    X_test,
+    y_test,
+    optimal_threshold
+):
+    baseline_model = LogisticRegression(class_weight='balanced', max_iter=1000, random_state=42)
+    baseline_model.fit(X_train, y_train)
+    
+    baseline_probs = baseline_model.predict_proba(X_test)[:, 1]
+    baseline_preds = (baseline_probs >= 0.5).astype(int)
+    
+    print("Logistic Regression Baseline Classification Report:")
+    print(classification_report(y_test, baseline_preds))
+    
+    print("\n=== GENERATING VISUAL ARTIFACTS ===")
+    primary_probs = model.predict_proba(X_test)[:, 1]
+    primary_preds = (primary_probs >= optimal_threshold).astype(int)
+    
+    fig, ax = plt.subplots(1, 2, figsize=(14, 6), facecolor='white')
+    
+    ConfusionMatrixDisplay.from_predictions(
+        y_test,
+        primary_preds,
+        ax=ax[0],
+        cmap='Blues',
+        display_labels=['Non-Fire (0)', 'Fire (1)']
+    )
+    ax[0].set_title(f"Confusion Matrix\n(Threshold = {optimal_threshold:.4f})", fontsize=14)
+    
+    PrecisionRecallDisplay.from_predictions(
+        y_test,
+        primary_probs,
+        ax=ax[1],
+        name="XGBoost Ensemble"
+    )
+    
+    PrecisionRecallDisplay.from_predictions(
+        y_test,
+        baseline_probs,
+        ax=ax[1],
+        name="Logistic Regression Baseline",
+        color="gray",
+        linestyle="--"
+    )
+    ax[1].set_title("Precision-Recall Curve Comparison", fontsize=14)
+    plt.tight_layout()
+    output_filename = "evaluation_artifacts.png"
+    plt.savefig(output_filename, dpi=300)
 
 def evaluate_model(model, X_test, y_test, features):
     probs = model.predict_proba(X_test)[:, 1]
@@ -36,8 +97,15 @@ def evaluate_model(model, X_test, y_test, features):
     
     preds_optimized = (probs >= optimal_threshold).astype(int)
     
-    auc = roc_auc_score(y_test, probs)
+    K = 1000
+    top_k_indices = np.argsort(probs)[-K:]
     
+    actual_fires_in_top_k = y_test.iloc[top_k_indices].sum()
+    precision_at_k = actual_fires_in_top_k / K
+    
+    print(f"Precision@{K}: {precision_at_k:.4f}")
+    
+    auc = roc_auc_score(y_test, probs)
     print("ROC-AUC: ", auc)
     print(classification_report(y_test, preds_optimized))
     
@@ -48,7 +116,7 @@ def evaluate_model(model, X_test, y_test, features):
     
     print(importance)
     
-    return probs
+    return optimal_threshold
 
 def generate_forecast(
     model, 

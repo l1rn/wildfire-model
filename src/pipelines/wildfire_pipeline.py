@@ -1,8 +1,9 @@
 from src.data import data_loader, split
 from src.models import train as tr
-from src.models import models
-from src.visualization import maps 
+from src.visualization import maps
+ 
 import pandas as pd
+import questionary
 
 class WildfirePipeline:
     def __init__(self, model_factory, use_lag: bool):
@@ -71,17 +72,21 @@ class WildfirePipeline:
         
         if "xgboost" in self.model_factory.__name__:
             scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
-            self.model = models.optimize_xgboost(
-                X_train,
-                y_train,
-                scale_pos_weight
-            )
+            self.model = self.model_factory(scale_pos_weight)
         else:
             self.model = self.model_factory()
             
         model = tr.train_model(self.model, X_train, y_train)
         probs = model.predict_proba(X_test)[:, 1] 
-        tr.evaluate_model(model, X_test, y_test, self.features)
+        optimal_threshold = tr.evaluate_model(model, X_test, y_test, self.features)
+        tr.generate_evaluation_artifacts(
+            model=self.model, 
+            X_train=X_train, 
+            y_train=y_train, 
+            X_test=X_test, 
+            y_test=y_test, 
+            optimal_threshold=optimal_threshold
+        )
         
         test_full = X_test_full.copy()
         test_full["fire"] = y_test
@@ -94,7 +99,6 @@ class WildfirePipeline:
             (df_full["valid_time"].dt.year == 2022) & 
             (df_full["valid_time"].dt.month == 7)
         ].copy()
-        tr.explain_model_with_shap(model, df_full[self.features])
         X_viz = target_month[self.features]
         target_month["fire_probability"] = model.predict_proba(X_viz)[:, 1]
         
@@ -117,5 +121,18 @@ class WildfirePipeline:
         df = self.load_data()
         self.build_features()
         model, test = self.train(df)
-        self.visualize(model, test)
-        # self.save(test)
+        options = questionary.checkbox(
+            "Select options:", 
+            choices=[
+                "SHAP Explanation Bar & Summary",
+                "Visualize Risk-map",
+                "Save the map in TIFF format for QGIS"
+            ]
+        ).ask()
+        
+        if "Visualize Risk-map" in options:
+            self.visualize(model, test)
+        if "SHAP Explanation Bar & Summary" in options:
+            tr.explain_model_with_shap(model, test[self.features])
+        if "Save the map in TIFF format for QGIS" in options:
+            self.save(test)

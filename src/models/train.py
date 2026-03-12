@@ -71,6 +71,62 @@ def generate_evaluation_artifacts(
     plt.tight_layout()
     output_filename = "evaluation_artifacts.png"
     plt.savefig(output_filename, dpi=300)
+    
+def generate_spatial_reliability_map(
+    X_test, y_test, probs, optimal_threshold, original_df
+):  
+    x_coords = original_df.loc[X_test.index, 'x'].values
+    y_coords = original_df.loc[X_test.index, 'y'].values
+    results_df = pd.DataFrame({
+        'x': x_coords,
+        'y': y_coords,
+        'probability': probs,
+        'observed_fire': y_test.values
+    })
+    
+    fig, ax = plt.subplots(figsize=(14, 8), facecolor='white')
+    
+    sc = ax.scatter(
+        results_df['x'], 
+        results_df['y'], 
+        c=results_df['probability'], 
+        cmap='YlOrRd', 
+        s=15, 
+        alpha=0.4,
+        edgecolors='none',
+        label='Predicted Probability Surface'
+    )
+    
+    observed_fires = results_df[results_df['observed_fire'] == 1]
+    ax.scatter(
+        observed_fires['x'],
+        observed_fires['y'], 
+        color='#000000',
+        marker='+', 
+        s=40, 
+        linewidths=1.5,
+        label='Observed Fire Hotspot (Ground Truth)'
+    )
+    
+    cbar = plt.colorbar(sc, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label('Algorithm Ignition Probability', fontsize=12)
+    cbar.ax.axhline(optimal_threshold, color='black', linestyle='--', linewidth=2)
+    cbar.ax.text(1.2, optimal_threshold, f'Threshold\n({optimal_threshold:.4f})', 
+                 va='center', ha='left', fontsize=10)
+    
+    ax.set_title('Spatial Reliability Analysis: Predicted Risk vs. Observed Ignitions', fontsize=16, pad=15)
+    ax.set_xlabel('Longitude', fontsize=12)
+    ax.set_ylabel('Latitude', fontsize=12)
+    
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles[-2:], labels[-2:], loc='upper right', framealpha=0.9)
+    
+    ax.grid(True, linestyle='--', alpha=0.3)
+    
+    plt.tight_layout()
+    output_filename = "spatial_reliability_map.png"
+    plt.savefig(output_filename, dpi=300)
+    print(f"Spatial reliability map successfully exported as {output_filename}")
 
 def evaluate_model(model, X_test, y_test, features):
     probs = model.predict_proba(X_test)[:, 1]

@@ -79,6 +79,7 @@ class WildfirePipeline:
         model = tr.train_model(self.model, X_train, y_train)
         probs = model.predict_proba(X_test)[:, 1] 
         optimal_threshold = tr.evaluate_model(model, X_test, y_test, self.features)
+        
         tr.generate_evaluation_artifacts(
             model=self.model, 
             X_train=X_train, 
@@ -86,6 +87,15 @@ class WildfirePipeline:
             X_test=X_test, 
             y_test=y_test, 
             optimal_threshold=optimal_threshold
+        )
+        
+        primary_probs = self.model.predict_proba(X_test)[:, 1]
+        tr.generate_spatial_reliability_map(
+            X_test=X_test, 
+            y_test=y_test, 
+            probs=primary_probs, 
+            optimal_threshold=optimal_threshold,
+            original_df=X_test_full
         )
         
         test_full = X_test_full.copy()
@@ -122,7 +132,7 @@ class WildfirePipeline:
         self.build_features()
         model, test = self.train(df)
         options = questionary.checkbox(
-            "Select options:", 
+            "Select options:",
             choices=[
                 "SHAP Explanation Bar & Summary",
                 "Visualize Risk-map",

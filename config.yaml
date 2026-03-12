@@ -11,6 +11,8 @@ data_paths:
   raw_ghm: "data/raw/khmao_human_mod_1km.tif"
   raw_peatland: "data/raw/khmao_peatland.tif"
   raw_oil_gas: "data/raw/khmao_oil_gas.tif"
+
+  khmao_geojson: "data/processed/khmao.geojson"
   processed_table: "data/processed/master_training_data.parquet"
 
 model_params:

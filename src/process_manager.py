@@ -4,10 +4,13 @@ from src.collection import GeeExtractor
 from src.models import cross_validation, models
 from src.cli import menu
 from src.pipelines import WildfirePipeline
+from src.config import Config 
 
 import src.preprocessing as preprocessing
+from src.visualization.maps import plot_historical_fires, plot_landcover_map
 
 collection = GeeExtractor()
+cfg = Config()
 
 def build_xgb(train):
     scale_pos_weight = len(train) / train["fire"].sum()
@@ -29,22 +32,22 @@ def show_master_table():
     
 def show_fire_archive_head():
     print("Showing fire archive head...")
-    firms = data_loader.load_firms(f"{RAW_DIR}/khmao_fire_archive.csv")
+    firms = data_loader.load_firms(cfg.raw_firms)
     print(firms.head())
     
 def show_ghm_info():
     print("Showing Global Human Modification head...")
-    human_mod = data_loader.load_static_raster(f"{RAW_DIR}/khmao_human_mod_90m.tif")
+    human_mod = data_loader.load_static_raster(cfg.raw_human_mod)
     print(human_mod.head())
     
 def show_topography_info():
     print("Showing Topography head...")
-    dem = data_loader.load_static_raster(f"{RAW_DIR}/khmao_topography.tif")
+    dem = data_loader.load_static_raster(cfg.raw_dem)
     print(dem.head())
     
 def show_landcover_info():
     print("Showing Land Cover head...")
-    lc = data_loader.load_static_raster(f"{RAW_DIR}/khmao_lc_90m.tif")
+    lc = data_loader.load_static_raster(cfg.raw_landcover)
     print(lc.head())
     
 def process_and_upload():
@@ -85,6 +88,31 @@ def wildfire_pipeline():
         
     pipeline = WildfirePipeline(factory, use_lag)
     pipeline.run()
+    
+def plot_data():
+    options = {
+        1: ("plot for historical fires",
+            lambda: plot_historical_fires(
+            cfg.raw_firms,
+            cfg.khmao_geojson,
+            2022,
+            7
+        )),
+        2: ("plot for landcover",
+            lambda: plot_landcover_map(
+                cfg.processed_table
+            ))
+    }
+    for key, (name, _) in options.items():
+        print(f"{key}:", name)
+        
+    ans = int(input("option: ")) 
+    _, action = options.get(ans)
+        
+    if action:
+        action()
+    else:
+        print("Wrong answer")
 
 def execute_modis_pipeline():
     collection.run()
@@ -103,6 +131,7 @@ options = {
 },
 2: {
     1: process_and_upload,
+    2: plot_data
 },
 3: {
     1: execute_modis_pipeline,

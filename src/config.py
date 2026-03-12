@@ -23,6 +23,7 @@ class Config:
         self.raw_oil_gas = data["data_paths"]["raw_oil_gas"]
         self.processed_table = data["data_paths"]["processed_table"]
         
+        self.khmao_geojson = data["data_paths"]["khmao_geojson"]
         self.config_file = data
         
     def get_study_years(self) -> dict:

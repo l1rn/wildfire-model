@@ -171,7 +171,7 @@ def process_data():
     
     dataset = xr.Dataset(dataset_dict)
     
-    khmao_boundary = gpd.read_file(f"{RAW_DIR}/khmao.geojson")
+    khmao_boundary = gpd.read_file(cfg.khmao_geojson)
     dataset = dataset.rio.clip(
         khmao_boundary.geometry, 
         khmao_boundary.crs, 

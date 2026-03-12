@@ -46,6 +46,13 @@ def load_master_dataset():
     df = pd.read_parquet(cfg.processed_table)
     df = df.reset_index()
     df["valid_time"] = pd.to_datetime(df["valid_time"])
+    df['month'] = df['valid_time'].dt.month
+    
+    winter_months = [11, 12, 1, 2, 3]
+    df = df[~df['month'].isin(winter_months)]
+    
+    non_burnable_classes = [50, 70, 80]
+    df = df[~df['landcover'].isin(non_burnable_classes)]
     return df
 
 def create_lag_features(df: pd.DataFrame):

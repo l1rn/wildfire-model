@@ -16,7 +16,7 @@ class GeeExtractor:
         self.bbox = ee.Geometry.BBox(59.0, 58.0, 86.0, 65.8)
             
     def run_gee_pipeline(self):
-        lc = ee.Image("ESA/WorldCover/v100/2020").clip(self.bbox).uint8()
+        lc = ee.Image("ESA/WorldCover/v200/2021").clip(self.bbox).uint8()
 
         dem_col = ee.ImageCollection("COPERNICUS/DEM/GLO30") \
             .filterBounds(self.bbox) \

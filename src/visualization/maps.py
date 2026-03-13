@@ -6,6 +6,7 @@ import xarray as xr
 import numpy as np
 from src.config import RAW_DIR, Config
 from matplotlib.colors import ListedColormap
+from shapely.geometry import Point 
 
 def plot_month_map(
     df: pd.DataFrame,
@@ -164,7 +165,45 @@ def plot_landcover_map(parquet_path: str):
     
     plt.tight_layout()
     plt.show()
-   
+  
+def create_bivariate_map(
+    df, var1='vpd', var2='ghm', output_path='docs/bivariate.png'
+):
+    subset = df[
+        (df["valid_time"].dt.year == 2022) & 
+        (df["valid_time"].dt.month == 7)
+    ].copy()
+    
+    if subset.empty:
+        print("⚠️ No data for July 2022. Using the entire dataset instead.")
+        subset = df.copy()
+
+    print("⚙️ Converting grid points to spatial geometries...")
+    geometry = [Point(xy) for xy in zip(subset['x'], subset['y'])]
+    gdf = gpd.GeoDataFrame(subset, geometry=geometry, crs="EPSG:4326")
+    
+    gdf['vpd_class'] = pd.qcut(gdf[var1].rank(method='first'), 3, labels=[0, 1, 2])
+    gdf['ghm_class'] = pd.qcut(gdf[var2].rank(method='first'), 3, labels=[0, 1, 2])
+    
+    gdf['bivariate_class'] = gdf['vpd_class'].astype(str) + gdf['ghm_class'].astype(str)
+    
+    color_dict = {
+        '00': '#e8e8e8', '10': '#e4acac', '20': '#c85a5a',
+        '01': '#b0d5df', '11': '#ad9ea5', '21': '#985356', 
+        '02': '#64acbe', '12': '#627f8c', '22': '#574249' 
+    }
+    
+    gdf['color'] = gdf['bivariate_class'].map(color_dict)
+    
+    fig, ax = plt.subplots(1, 1, figsize=(12, 10))
+    gdf.plot(color=gdf['color'], edgecolor='none', ax=ax)
+    
+    ax.set_title("Synergistic Wildfire Drivers: VPD and Human Modification", fontsize=16)
+    ax.set_axis_off()
+    
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.show()
+    
 def save_to_geotiff(
     df: pd.DataFrame,
     year: int,

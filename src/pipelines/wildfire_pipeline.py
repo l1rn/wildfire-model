@@ -80,23 +80,23 @@ class WildfirePipeline:
         probs = model.predict_proba(X_test)[:, 1] 
         optimal_threshold = tr.evaluate_model(model, X_test, y_test, self.features)
         
-        tr.generate_evaluation_artifacts(
-            model=self.model, 
-            X_train=X_train, 
-            y_train=y_train, 
-            X_test=X_test, 
-            y_test=y_test, 
-            optimal_threshold=optimal_threshold
-        )
+        # tr.generate_evaluation_artifacts(
+        #     model=self.model, 
+        #     X_train=X_train, 
+        #     y_train=y_train, 
+        #     X_test=X_test, 
+        #     y_test=y_test, 
+        #     optimal_threshold=optimal_threshold
+        # )
         
-        primary_probs = self.model.predict_proba(X_test)[:, 1]
-        tr.generate_spatial_reliability_map(
-            X_test=X_test, 
-            y_test=y_test, 
-            probs=primary_probs, 
-            optimal_threshold=optimal_threshold,
-            original_df=X_test_full
-        )
+        # primary_probs = self.model.predict_proba(X_test)[:, 1]
+        # tr.generate_spatial_reliability_map(
+        #     X_test=X_test, 
+        #     y_test=y_test, 
+        #     probs=primary_probs, 
+        #     optimal_threshold=optimal_threshold,
+        #     original_df=X_test_full
+        # )
         
         test_full = X_test_full.copy()
         test_full["fire"] = y_test
@@ -136,7 +136,8 @@ class WildfirePipeline:
             choices=[
                 "SHAP Explanation Bar & Summary",
                 "Visualize Risk-map",
-                "Save the map in TIFF format for QGIS"
+                "Save the map in TIFF format for QGIS",
+                "Create Bivarite Map GHM & VPD"
             ]
         ).ask()
         
@@ -146,3 +147,5 @@ class WildfirePipeline:
             tr.explain_model_with_shap(model, test[self.features])
         if "Save the map in TIFF format for QGIS" in options:
             self.save(test)
+        if "Create Bivarite Map GHM & VPD" in options:
+            maps.create_bivariate_map(test)

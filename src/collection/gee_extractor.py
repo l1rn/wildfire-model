@@ -1,6 +1,8 @@
 import ee
 import pandas as pd
 
+import questionary
+
 class GeeExtractor:
     def __init__(self):
         self.bbox = None
@@ -60,6 +62,25 @@ class GeeExtractor:
         pop_density = ee.ImageCollection("JRC/GHSL/P2023A/GHS_POP") \
             .sort('system:time_start', False) \
             .first().rename("pop_density").clip(self.bbox)
+        
+        years = range(2016, 2027) # Строго до 2027, чтобы включить 2026
+        
+        yearly_bands = []
+        
+        for year in years:
+            base_empty = ee.Image.constant(0).byte().rename(f'burned_{year}')
+            fires = ee.ImageCollection("MODIS/061/MCD64A1") \
+                .filterBounds(self.bbox) \
+                .filterDate(f'{year}-01-01', f'{year}-12-31') \
+                .select('BurnDate')
+            
+            fire_max = fires.max().gt(0).rename(f'burned_{year}').byte()
+            
+            yearly_burned = ee.ImageCollection([base_empty, fire_max]).mosaic()
+            
+            yearly_bands.append(yearly_burned)
+            
+        burned_area_multiband = ee.Image.cat(yearly_bands).clip(self.bbox)
             
         export_params = {
             'region': self.bbox.getInfo()['coordinates'],
@@ -69,10 +90,32 @@ class GeeExtractor:
             'maxPixels': 1e9,
             'folder': 'GEE_KHMAO_RAW'
         }
+        options = questionary.checkbox(
+            "Select options:",
+            choices=[
+                "landcover",
+                "terrain",
+                "ghm",
+                "dist_oil_gas",
+                "road_density",
+                "peatland_flag",
+                "pop_density",
+                "burned_area_yearly"
+            ]
+        ).ask()
         
-        layers = {
-            'PopDensity': pop_density
+        layer_mapping = {
+            "landcover": lc,
+            "terrain": terrain,
+            "ghm": ghm,
+            "dist_oil_gas": dist_oil_gas,
+            "road_density": road_density,
+            "peatland_flag": peat,
+            "pop_density": pop_density,
+            "burned_area_yearly": burned_area_multiband
         }
+        
+        layers = {key: layer_mapping[key] for key in options}
         
         print("Submitting tasks to GEE")
         for name, image in layers.items():

@@ -18,7 +18,9 @@ def calculate_vpd(t2m_k, d2m_k):
 
     es = 610.78 * np.exp((17.2694 * t_c) / (t_c + 237.3))
     ea = 610.78 * np.exp((17.2694 * d_c) / (d_c + 237.3))
-    return es - ea
+    
+    vpd_pa = es - ea
+    return vpd_pa / 100.0
 
 def unify_xy(*arrays):
     return [da.rename({"latitude": "y", "longitude": "x"}) for da in arrays]
@@ -39,6 +41,7 @@ def rasterize_monthly_fire(
     template = climate_da.isel(valid_time=0)
     transform = template.rio.transform()    
     
+    firms_gdf['year_month'] = firms_gdf['acq_date'].dt.to_period('M')
     grouped = firms_gdf.groupby("year_month")
     fire_rasters = []
     for time in tqdm(climate_da.valid_time.values, desc="Rasterizing Fire Data"):
@@ -69,7 +72,7 @@ def rasterize_monthly_fire(
             "y": climate_da.y,
             "x": climate_da.x,
         },
-        name="file"
+        name="fire"
     )
 
 def process_data():
@@ -92,6 +95,8 @@ def process_data():
     sm1 = monthly["swvl1"]
     tp = ds["tp"].resample(valid_time="1ME").sum() * 1000
     
+    wind_speed = np.sqrt(u10**2 + v10**2)
+    wind_speed.name = "wind_speed"
     static_stack = {
         "dem": topo.sel(band=1),
         "slope": topo.sel(band=2),
@@ -108,8 +113,8 @@ def process_data():
 
 
     t2m, d2m, tp, vpd, \
-    sm1, u10, v10 = unify_xy(
-        t2m, d2m, tp, vpd, sm1, u10, v10,
+    sm1, wind_speed = unify_xy(
+        t2m, d2m, tp, vpd, sm1, wind_speed
     )
     
     processed_static = {}
@@ -123,46 +128,40 @@ def process_data():
     for name, da in list(processed_static.items()):
         nans_before = da.isnull().sum().item()
         if nans_before > 0:
-            if name in ["slope", "ghm", "dist_oil_gas"]:
+            if name in ["slope", "ghm"]:
                 fill_value = float(da.median())
                 processed_static[name] = da.fillna(fill_value)
-                print(f"  {name}: filled {nans_before} NaNs with median = {fill_value:.2f}")
-            elif name in ["landcover", "peatland"]:
-                fill_value = int(da.mode(dim=["x", "y"].isel(mode=0)))
+            elif name == "dist_oil_gas":
+                fill_value = float(da.max())
                 processed_static[name] = da.fillna(fill_value)
-                print(f"  {name}: filled {nans_before} NaNs with median = {fill_value}")
+            elif name in ["landcover", "peatland"]:
+                fill_value = int(da.mode(dim=["x", "y"]).isel(mode=0).compute())                
+                processed_static[name] = da.fillna(fill_value).astype(int)
             else:
                 processed_static[name] = da.fillna(0)
 
-    processed_static["pop_density"] = processed_static["pop_density"].fillna(0)
-    processed_static["dist_oil_gas"] = processed_static["dist_oil_gas"].fillna(processed_static["dist_oil_gas"].max())
-    
     t2m = t2m.interpolate_na(dim="x", method="nearest")
     sm1 = sm1.interpolate_na(dim="x", method="nearest")
     
     broadcast_layers = broadcast_static_layers(t2m, **processed_static)
     
     wildfire = firms[firms['type'] == 0]
-    industrial_heat = firms[firms['type'] == 2]
-    
+    # industrial_heat = firms[firms['type'] == 2]
     fire_monthly = rasterize_monthly_fire(
         firms_gdf=wildfire, climate_da=t2m
     )
     
     def align(da, target):
-        return (
-            da.assign_coords(y=target.y, x = target.x)
-            .rio.write_crs("EPSG:4326")
-            .drop_vars("band", errors="ignore")
-        )
+        if not (da.x.equals(target.x) and da.y.equals(target.y)):
+            da = da.interp_like(target)
+        return da.rio.write_crs("EPSG:4326")
     
     dataset_dict = {
         "temp": t2m,
         "vpd": align(vpd, t2m),
         "precip": align(tp, t2m),
         "sm1": align(sm1, t2m),
-        "u10": align(u10, t2m),
-        "v10": align(v10, t2m),
+        "wind_speed": align(wind_speed, t2m),
         "fire": align(fire_monthly, t2m)
     }
     
@@ -182,10 +181,10 @@ def process_data():
     df = (
         dataset
         .stack(points=("x", "y", "valid_time"))
-        .dropna("points", how="all")
+        .dropna("points", subset=["temp", "dem"])
     )
-    
-    df_final = df.to_dataframe().reset_index().fillna(0)
+
+    df_final = df.to_dataframe().reset_index()
     
     return df_final
 

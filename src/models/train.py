@@ -11,6 +11,7 @@ from sklearn.metrics import (
     ConfusionMatrixDisplay,
 )
 from sklearn.linear_model import LogisticRegression
+from sklearn.inspection import PartialDependenceDisplay
 from src.config import PROCESSED_DIR
 import matplotlib.pyplot as plt
 import shap
@@ -128,6 +129,44 @@ def generate_spatial_reliability_map(
     plt.savefig(output_filename, dpi=300)
     print(f"Spatial reliability map successfully exported as {output_filename}")
 
+def generate_partial_dependence_plots(model, X_test, sample_size=10000, random_state=42):
+    """
+    Generates 1D and 2D Partial Dependence Plots to visualize feature thresholds 
+    and interaction effects.
+    """
+    print("Generating Partial Dependence Plots...")
+    if len(X_test) > sample_size:
+        print(f"Subsampling test set from {len(X_test)} to {sample_size} rows for rapid PDP generation.")
+        X_eval = X_test.sample(n=sample_size, random_state=random_state)
+    else:
+        X_eval = X_test
+    features_to_plot = [
+        'ghm', 
+        'vpd', 
+        ('ghm', 'vpd')
+    ]
+    
+    fig, ax = plt.subplots(figsize=(15, 6))
+    
+    display = PartialDependenceDisplay.from_estimator(
+        estimator=model,
+        X=X_eval,
+        features=features_to_plot,
+        kind='average',
+        grid_resolution=40, 
+        ax=ax,
+        n_jobs=-1
+    )
+    
+    fig.suptitle('Partial Dependence: Infrastructure Proximity vs. Synergistic Climate Effects', fontsize=16)
+    plt.subplots_adjust(top=0.9)  
+    
+    output_filename = "pdp_infrastructure_climate.png"
+    plt.savefig(output_filename, dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    print(f"Partial Dependence Plots saved successfully to {output_filename}")
+    
 def evaluate_model(model, X_test, y_test, features):
     probs = model.predict_proba(X_test)[:, 1]
     precisions, recalls, thresholds = precision_recall_curve(

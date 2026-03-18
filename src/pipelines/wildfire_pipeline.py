@@ -27,8 +27,7 @@ class WildfirePipeline:
             "ghm", 
             "slope", 
             "sm1", 
-            "u10", 
-            "v10", 
+            "wind_speed", 
             "pop_density", 
             "dist_oil_gas", 
             "peatland",
@@ -53,7 +52,7 @@ class WildfirePipeline:
         self.features = base + extra
         
     def train(self, df):
-        X_train_full, X_test_full, y_train_full, y_test, _, _, _, _ = split.temporal_split(df)       
+        X_train_full, X_test_full, y_train_full, y_test  = split.temporal_split(df)       
         
         train_df = X_train_full.copy()
         train_df['fire'] = y_train_full        
@@ -80,23 +79,23 @@ class WildfirePipeline:
         probs = model.predict_proba(X_test)[:, 1] 
         optimal_threshold = tr.evaluate_model(model, X_test, y_test, self.features)
         
-        # tr.generate_evaluation_artifacts(
-        #     model=self.model, 
-        #     X_train=X_train, 
-        #     y_train=y_train, 
-        #     X_test=X_test, 
-        #     y_test=y_test, 
-        #     optimal_threshold=optimal_threshold
-        # )
+        tr.generate_evaluation_artifacts(
+            model=self.model, 
+            X_train=X_train, 
+            y_train=y_train, 
+            X_test=X_test, 
+            y_test=y_test, 
+            optimal_threshold=optimal_threshold
+        )
         
-        # primary_probs = self.model.predict_proba(X_test)[:, 1]
-        # tr.generate_spatial_reliability_map(
-        #     X_test=X_test, 
-        #     y_test=y_test, 
-        #     probs=primary_probs, 
-        #     optimal_threshold=optimal_threshold,
-        #     original_df=X_test_full
-        # )
+        primary_probs = self.model.predict_proba(X_test)[:, 1]
+        tr.generate_spatial_reliability_map(
+            X_test=X_test, 
+            y_test=y_test, 
+            probs=primary_probs, 
+            optimal_threshold=optimal_threshold,
+            original_df=X_test_full
+        )
         
         test_full = X_test_full.copy()
         test_full["fire"] = y_test
@@ -136,6 +135,7 @@ class WildfirePipeline:
             choices=[
                 "SHAP Explanation Bar & Summary",
                 "Visualize Risk-map",
+                "Generate Partial Dependence Plots (PDP)",
                 "Save the map in TIFF format for QGIS",
                 "Create Bivarite Map GHM & VPD"
             ]
@@ -145,6 +145,8 @@ class WildfirePipeline:
             self.visualize(model, test)
         if "SHAP Explanation Bar & Summary" in options:
             tr.explain_model_with_shap(model, test[self.features])
+        if "Generate Partial Dependence Plots (PDP)" in options:
+            tr.generate_partial_dependence_plots(model, test[self.features])
         if "Save the map in TIFF format for QGIS" in options:
             self.save(test)
         if "Create Bivarite Map GHM & VPD" in options:

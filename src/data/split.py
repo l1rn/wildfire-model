@@ -2,21 +2,23 @@ from sklearn.model_selection import train_test_split
 import pandas as pd
 
 def temporal_split(
-    df: pd.DataFrame
+    df: pd.DataFrame,
+    test_size: int = 0.2
 ):
-    X = df.drop(columns=['fire'])
-    y = df['fire']
+    df = df.sort_values('valid_time')
+    split_idx = int(len(df) * (1 - test_size))
     
-    stratify_col = df['fire'].astype(str) + "_" + df['is_extreme_year'].astype(str)
+    train_df = df.iloc[:split_idx]
+    test_df = df.iloc[split_idx:]
     
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=stratify_col
-    )
+    X_train = train_df.drop(columns=["fire"])
+    y_train = train_df["fire"]
+    
+    X_test = test_df.drop(columns=["fire"])
+    y_test = test_df["fire"]
     
     X_test_hot = X_test[X_test['is_extreme_year'] == 1]
     y_test_hot = y_test[X_test['is_extreme_year'] == 1]
-    
     X_test_cold = X_test[X_test['is_extreme_year'] == 0]
     y_test_cold = y_test[X_test['is_extreme_year'] == 0]
-    
-    return X_train, X_test, y_train, y_test, X_test_hot, y_test_hot, X_test_cold, y_test_cold
+    return X_train, X_test, y_train, y_test

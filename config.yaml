@@ -1,6 +1,6 @@
 study_years:
-  anomalous_hot: [2016, 2020, 2022]
-  baseline_cold: [2017, 2018, 2024]
+  anomalous_hot: [2016, 2020, 2022, 2023]
+  baseline_cold: [2017, 2018, 2019, 2021, 2024, 2025]
 
 data_paths:
   raw_weather: "data/raw/khmao_era5.nc"

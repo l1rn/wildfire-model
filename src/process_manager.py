@@ -3,7 +3,7 @@ from src.config import PROCESSED_DIR, RAW_DIR
 from src.collection import GeeExtractor
 from src.models import cross_validation, models
 from src.cli import menu
-from src.pipelines import WildfirePipeline
+from src.pipelines import WildfirePipeline, TemperaturePipeline
 from src.config import Config 
 
 import src.preprocessing as preprocessing
@@ -29,6 +29,7 @@ def show_master_table():
     df = df.loc[:, ~df.columns.str.contains("^index")]
     df: pd.DataFrame = df.loc[:, ~df.columns.str.contains("^level_0")]
     print(df.columns)
+    print(df['year'].unique())
     
 def show_fire_archive_head():
     print("Showing fire archive head...")
@@ -89,6 +90,10 @@ def wildfire_pipeline():
     pipeline = WildfirePipeline(factory, use_lag)
     pipeline.run()
     
+def temperature_pipeline():
+    pipeline = TemperaturePipeline()
+    pipeline.run()
+    
 def plot_data():
     options = {
         1: ("plot for historical fires",
@@ -140,6 +145,7 @@ options = {
 4: {
     1: summarize_cv,
     2: wildfire_pipeline,
+    3: temperature_pipeline
 }}
     
 def choose_option():

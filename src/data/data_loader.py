@@ -5,6 +5,10 @@ import geopandas as gpd
 from src.config import Config
 
 from typing import Optional
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 cfg = Config()
 
@@ -12,6 +16,7 @@ def load_meterological(path: str) -> Optional[xr.Dataset]:
     """Loads ERA5 NetCDF and ensure coordinates are standard."""
     try:
         with xr.open_dataset(path) as ds:
+            logger.info(f"Loaded meteorological data from {path}")
             return ds.load()
     except Exception as e:
         print(f"Failed to open NetCDF4: {e}")
@@ -21,6 +26,7 @@ def load_static_raster(path: str) -> Optional[xr.DataArray]:
     """Loads GeoTIFFs using rioxarray"""
     try:
         with rioxarray.open_rasterio(path) as rst:
+            logger.info(f"Loaded a raster image from {path}")
             return rst.load()
     except Exception as e:
         print(f"Failed to open TIFF: {e}")
@@ -37,6 +43,7 @@ def load_firms(path: str) -> Optional[gpd.GeoDataFrame]:
             geometry=gpd.points_from_xy(df.longitude, df.latitude),
             crs="EPSG:4326"
         )
+        logger.info(f"Loaded fire data from {path}")
         return gdf
     except Exception as e:
         print(f"Failed to Open CSV: {e}")
@@ -48,11 +55,9 @@ def load_master_dataset():
     df["valid_time"] = pd.to_datetime(df["valid_time"])
     df['month'] = df['valid_time'].dt.month
     
-    winter_months = [11, 12, 1, 2, 3]
-    df = df[~df['month'].isin(winter_months)]
+    df = df[~df['month'].isin(cfg.WILDFIRE_SEASON_MONTHS)]
     
-    non_burnable_classes = [50, 70, 80]
-    df = df[~df['landcover'].isin(non_burnable_classes)]
+    df = df[~df['landcover'].isin(cfg.NON_BURNABLE_CLASSES_LC)]
     return df
 
 def create_lag_features(df: pd.DataFrame):
@@ -75,3 +80,11 @@ def prepare_features(df: pd.DataFrame):
     ])
     
     return df
+
+def validate_dataset(df: pd.DataFrame):
+    """Run sanity checks on the final dataframe."""
+    assert df['fire'].sum() > 0, "No fire events in dataset!"
+    assert not df[['temp', 'vpd', 'precip', 'ghm']].isnull().any().any(), "Missing values in core features"
+    assert df['x'].between(60, 85).all(), "Longitudes out of expected range"
+    assert df['y'].between(55, 70).all(), "Latitudes out of expected range"
+    logger.info(f"Validation passed: {len(df)} rows, {df['fire'].sum()} fires")

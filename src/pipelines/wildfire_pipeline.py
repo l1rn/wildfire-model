@@ -15,9 +15,7 @@ class WildfirePipeline:
     def load_data(self):
         df = data_loader.load_master_dataset()
         df = df.loc[:, ~df.columns.str.contains("^index|level_0")]
-        df['valid_time'] = pd.to_datetime(df['valid_time'])
-        df['month'] = df['valid_time'].dt.month
-        df = df[df['month'].between(4, 10)]
+        data_loader.validate_dataset(df)
         return data_loader.prepare_features(df)
     
     def build_features(self):

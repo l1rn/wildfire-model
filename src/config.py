@@ -25,6 +25,11 @@ class Config:
         
         self.khmao_geojson = data["data_paths"]["khmao_geojson"]
         self.config_file = data
+    
+    WILDFIRE_SEASON_MONTHS = list(range(4, 11))
+    NON_BURNABLE_CLASSES_LC = [50, 70, 80]
+    RANDOM_SEED = 42
+    BALANCED_RATIO = 10
         
     def get_study_years(self) -> dict:
         return self.config_file["study_years"]

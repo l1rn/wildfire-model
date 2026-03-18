@@ -13,6 +13,21 @@ KELVIN = 273.15
 cfg = Config()
 
 def calculate_vpd(t2m_k, d2m_k):
+    """
+    Calculate Vapor Pressure Deficit (VPD) from temperature and dewpoint.
+    
+    Parameters
+    ----------
+    t2m_k : xr.DataArray
+        Air temperature at 2m (Kelvin).
+    d2m_k : xr.DataArray
+        Dewpoint temperature at 2m (Kelvin).
+    
+    Returns
+    -------
+    xr.DataArray
+        VPD in hPa (hectopascals).
+    """
     t_c = t2m_k - KELVIN
     d_c = d2m_k - KELVIN
 
@@ -78,6 +93,9 @@ def rasterize_monthly_fire(
 def process_data():
     """ Data Integration """
     topo = data_loader.load_static_raster(cfg.raw_dem)
+    if topo is None:
+        raise FileNotFoundError(f"Could not load DEM from {cfg.raw_dem}")
+    
     lc = data_loader.load_static_raster(cfg.raw_landcover)
     ghm = data_loader.load_static_raster(cfg.raw_human_mod)
     oil_gas = data_loader.load_static_raster(cfg.raw_oil_gas)

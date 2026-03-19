@@ -1,14 +1,21 @@
 from src.data import data_loader, split
 from src.models import train as tr
 from src.visualization import maps
+from src.config import Config
  
 import pandas as pd
 import questionary
+from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
+from sklearn.preprocessing import StandardScaler
+from xgboost import XGBClassifier
 
+cfg = Config()
 class WildfirePipeline:
-    def __init__(self, model_factory, use_lag: bool):
+    def __init__(self, model_factory, use_lag: bool, tune: bool, params: dict = None):
         self.model_factory = model_factory
         self.use_lag = use_lag
+        self.tune = tune
+        self.params = params or {}
         self.features = None
         self.model = None
         
@@ -50,10 +57,13 @@ class WildfirePipeline:
         self.features = base + extra
         
     def train(self, df):
-        X_train_full, X_test_full, y_train_full, y_test  = split.temporal_split(df)       
+        X_train, X_test, y_train, y_test  = split.temporal_split(df)       
         
-        train_df = X_train_full.copy()
-        train_df['fire'] = y_train_full        
+        test_full = X_test.copy()
+        test_full["fire"] = y_test
+        
+        train_df = X_train.copy()
+        train_df['fire'] = y_train        
         
         ones = train_df[train_df['fire'] == 1]
         zeros = train_df[train_df['fire'] == 0]
@@ -64,42 +74,66 @@ class WildfirePipeline:
         
         X_train = train_balanced[self.features]
         y_train = train_balanced['fire']
+        X_test = X_test[self.features]
         
-        X_test = X_test_full[self.features]
+        scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
         
+        # scaler = StandardScaler()
+        # X_train_scaled = scaler.fit_transform(X_train)
+        # X_test_scaled = scaler.fit_transform(X_test)
         if "xgboost" in self.model_factory.__name__:
-            scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
-            self.model = self.model_factory(scale_pos_weight)
+            if self.tune:
+                base_model = XGBClassifier(scale_pos_weight=scale_pos_weight, 
+                                        random_state=42, eval_metrics='logloss')
+                
+                param_grid = {
+                    'n_estimators': [100, 200],
+                    'max_depth': [3, 5, 7],
+                    'learning_rate': [0.01, 0.1],
+                    'subsample': [0.8, 1.0],
+                    'colsample_bytree': [0.8, 1.0]
+                }
+                
+                tscv = TimeSeriesSplit(n_splits=3)
+                
+                grid_search = GridSearchCV(
+                    estimator=base_model,
+                    param_grid=param_grid,
+                    cv = tscv, 
+                    scoring='roc_auc',
+                    n_jobs=-1,
+                    verbose=1
+                )
+                
+                grid_search.fit(X_train, y_train)
+                print("Best parameters:", grid_search.best_params_)
+                best_params = grid_search.best_params_                
+                import json
+                with open(cfg.xgboost_params, 'w') as f:
+                    json.dump(best_params, f)
+                
+                self.model = XGBClassifier(
+                    **best_params,
+                    scale_pos_weight=scale_pos_weight,
+                    random_state=42,
+                    eval_metric='logloss'
+                )
+            else:
+                model_params = self.params.copy()
+                model_params['scale_pos_weight'] = scale_pos_weight
+                model_params['random_state'] = 42
+                model_params['eval_metric'] = 'logloss'
+                self.model = XGBClassifier(**model_params)
         else:
             self.model = self.model_factory()
-            
-        model = tr.train_model(self.model, X_train, y_train)
-        probs = model.predict_proba(X_test)[:, 1] 
-        optimal_threshold = tr.evaluate_model(model, X_test, y_test, self.features)
-        
-        tr.generate_evaluation_artifacts(
-            model=self.model, 
-            X_train=X_train, 
-            y_train=y_train, 
-            X_test=X_test, 
-            y_test=y_test, 
-            optimal_threshold=optimal_threshold
+        self.model.fit(X_train, y_train)
+        probs = self.model.predict_proba(X_test)[:, 1] 
+        optimal_threshold = tr.evaluate_model(
+            self.model, X_test, y_test, self.features
         )
-        
-        primary_probs = self.model.predict_proba(X_test)[:, 1]
-        tr.generate_spatial_reliability_map(
-            X_test=X_test, 
-            y_test=y_test, 
-            probs=primary_probs, 
-            optimal_threshold=optimal_threshold,
-            original_df=X_test_full
-        )
-        
-        test_full = X_test_full.copy()
-        test_full["fire"] = y_test
+
         test_full["fire_probability"] = probs
-        
-        return model, test_full
+        return self.model, test_full
     
     def visualize(self, model, df_full):
         target_month = df_full[
@@ -135,7 +169,8 @@ class WildfirePipeline:
                 "Visualize Risk-map",
                 "Generate Partial Dependence Plots (PDP)",
                 "Save the map in TIFF format for QGIS",
-                "Create Bivarite Map GHM & VPD"
+                "Create Bivarite Map GHM & VPD",
+                "Animate Risk Over Time"
             ]
         ).ask()
         
@@ -149,3 +184,5 @@ class WildfirePipeline:
             self.save(test)
         if "Create Bivarite Map GHM & VPD" in options:
             maps.create_bivariate_map(test)
+        if "Animate Risk Over Time" in options:
+            maps.animate_risk_over_time(test, year=2022)

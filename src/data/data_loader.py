@@ -2,7 +2,9 @@ import xarray as xr
 import rioxarray
 import pandas as pd
 import geopandas as gpd
+import numpy as np
 from src.config import Config
+
 
 from typing import Optional
 import logging
@@ -67,6 +69,9 @@ def create_lag_features(df: pd.DataFrame):
     df["vpd_ghm_interaction_lag1"] = df["vpd_lag1"] * df["ghm"]
     df["vpd_ghm_interaction"] = df["vpd"] * df["ghm"]
     df["month"] = df["valid_time"].dt.month
+    df["month_sin"] = np.sin(2 * np.pi * df['month'] / 12)
+    df["month_cos"] = np.cos(2 * np.pi * df['month'] / 12)
+    
     return df
 
 def prepare_features(df: pd.DataFrame):
@@ -85,6 +90,6 @@ def validate_dataset(df: pd.DataFrame):
     """Run sanity checks on the final dataframe."""
     assert df['fire'].sum() > 0, "No fire events in dataset!"
     assert not df[['temp', 'vpd', 'precip', 'ghm']].isnull().any().any(), "Missing values in core features"
-    assert df['x'].between(60, 85).all(), "Longitudes out of expected range"
-    assert df['y'].between(55, 70).all(), "Latitudes out of expected range"
+    assert df['x'].between(58, 87).all(), "Longitudes out of expected range"
+    assert df['y'].between(57, 67).all(), "Latitudes out of expected range"
     logger.info(f"Validation passed: {len(df)} rows, {df['fire'].sum()} fires")

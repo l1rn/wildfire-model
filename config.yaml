@@ -2,6 +2,8 @@ study_years:
   anomalous_hot: [2016, 2020, 2022, 2023]
   baseline_cold: [2017, 2018, 2019, 2021, 2024, 2025]
 
+production: False
+
 data_paths:
   raw_weather: "data/raw/khmao_era5.nc"
   raw_dem: "data/raw/khmao_terrain_1km.tif"
@@ -14,6 +16,7 @@ data_paths:
 
   khmao_geojson: "data/processed/khmao.geojson"
   processed_table: "data/processed/master_training_data.parquet"
+  xgboost_params: "data/processed/best_xgboost_params.json"
 
 model_params:
   test_size: 0.2

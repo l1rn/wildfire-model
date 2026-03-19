@@ -86,8 +86,14 @@ def summarize_cv():
 def wildfire_pipeline():
     model_name, factory = menu.choose_model()
     use_lag = int(input("Use lag features(yes - 1 / no - 0): "))
-        
-    pipeline = WildfirePipeline(factory, use_lag)
+    if cfg.production_mode:
+        import json
+        with(cfg.xgboost_params, 'r') as f:
+            best_params = json.load(f)
+        pipeline = WildfirePipeline(factory, use_lag, tune=False, params=best_params)
+    else:
+        pipeline = WildfirePipeline(factory, use_lag, tune=True)
+
     pipeline.run()
     
 def temperature_pipeline():

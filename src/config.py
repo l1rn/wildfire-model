@@ -25,7 +25,9 @@ class Config:
         
         self.khmao_geojson = data["data_paths"]["khmao_geojson"]
         self.config_file = data
-    
+        self.xgboost_params = data["data_paths"]["xgboost_params"]
+        self.production_mode = data["production"]
+
     WILDFIRE_SEASON_MONTHS = list(range(4, 11))
     NON_BURNABLE_CLASSES_LC = [50, 70, 80]
     RANDOM_SEED = 42

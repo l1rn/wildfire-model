@@ -8,6 +8,8 @@ from src.config import RAW_DIR, Config
 from matplotlib.colors import ListedColormap
 from shapely.geometry import Point 
 
+import matplotlib.animation as animation
+
 def plot_month_map(
     df: pd.DataFrame,
     year: int,
@@ -203,7 +205,38 @@ def create_bivariate_map(
     
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.show()
+
+def animate_risk_over_time(df, year, output_file='risk_animation.gif'):
+    months = sorted(df['month'].unique())
+    fig, ax = plt.subplot(figsize=(10, 6))
     
+    def update(month):
+        ax.clear()
+        subset = df[df['month'] == month]
+        
+        if subset.empty:
+            return
+        
+        subset = subset.copy()
+        subset['x_rounded'] = subset['x'].round(2)
+        subset['y_rounded'] = subset['y'].round(2)
+        risk_grid = subset.pivot(index='y_rounded', columns='x_rounded', values='fire_probability')
+        xmin, xmax = risk_grid.columns.min(), risk_grid.columns.max()
+        ymin, ymax = risk_grid.index.min(), risk_grid.index.max()
+        
+        ax.imshow(risk_grid.values, origin='lower', extent=[xmin, xmax, ymin, ymax],
+                  cmap='plasma', vmin=0, vmax=1)
+        ax.set_title(f"Fire probability - {month}/{year}")
+        ax.set_xlabel("Longitude")
+        ax.set_ylabel("Latitude")
+        
+        ax.grid(True, linestyle='--', alpha=0.3)
+        
+    ani = animation.FuncAnimation(fig, update, frames=months, repeat=True)
+    ani.save(output_file, writer='pillow', fps=1)
+    plt.close()
+    print(f"Animation saved to {output_file}")
+        
 def save_to_geotiff(
     df: pd.DataFrame,
     year: int,

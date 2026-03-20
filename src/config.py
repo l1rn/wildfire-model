@@ -24,8 +24,10 @@ class Config:
         self.processed_table = data["data_paths"]["processed_table"]
         
         self.khmao_geojson = data["data_paths"]["khmao_geojson"]
-        self.config_file = data
         self.xgboost_params = data["data_paths"]["xgboost_params"]
+        self.risk_map_animation_output = data["data_paths"]["risk_map_animation_output"]
+
+        self.config_file = data
         self.production_mode = data["production"]
 
     WILDFIRE_SEASON_MONTHS = list(range(4, 11))
@@ -34,4 +36,7 @@ class Config:
     BALANCED_RATIO = 10
         
     def get_study_years(self) -> dict:
-        return self.config_file["study_years"]
+        return {
+            'anomalous_hot': [2016, 2020, 2022, 2023],
+            'baseline_cold': [2017, 2018, 2019, 2021, 2024, 2025]
+        }

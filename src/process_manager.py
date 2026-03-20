@@ -88,11 +88,24 @@ def wildfire_pipeline():
     use_lag = int(input("Use lag features(yes - 1 / no - 0): "))
     if cfg.production_mode:
         import json
-        with(cfg.xgboost_params, 'r') as f:
+        with open(cfg.xgboost_params, 'r') as f:
             best_params = json.load(f)
-        pipeline = WildfirePipeline(factory, use_lag, tune=False, params=best_params)
+            
+        pipeline = WildfirePipeline(
+            factory, 
+            use_lag, 
+            tune=False, 
+            params=best_params,
+            use_smote=True,
+            downsample_ratio=10,
+            smote_ratio=0.3
+        )
     else:
-        pipeline = WildfirePipeline(factory, use_lag, tune=True)
+        pipeline = WildfirePipeline(
+            factory, 
+            use_lag, 
+            tune=True
+        )
 
     pipeline.run()
     

@@ -1,6 +1,5 @@
 import pandas as pd
-from xgboost import XGBClassifier
-from sklearn.ensemble import RandomForestClassifier
+
 from sklearn.metrics import (
     roc_auc_score, 
     classification_report, 
@@ -16,6 +15,7 @@ from src.config import PROCESSED_DIR
 import matplotlib.pyplot as plt
 import shap
 import numpy as np
+from sklearn.preprocessing import StandardScaler
 
 def train_model(model, X_train, y_train):
     model.fit(X_train, y_train)
@@ -27,20 +27,29 @@ def generate_evaluation_artifacts(
     y_train,
     X_test,
     y_test,
-    optimal_threshold
+    optimal_threshold,
+    primary_probs=None,
+    primary_preds=None
 ):
-    baseline_model = LogisticRegression(class_weight='balanced', max_iter=1000, random_state=42)
-    baseline_model.fit(X_train, y_train)
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.fit_transform(X_test)
+    baseline_model = LogisticRegression(
+        class_weight='balanced', max_iter=2000, random_state=42,solver='lbfgs'
+    )
+    baseline_model.fit(X_train_scaled, y_train)
     
-    baseline_probs = baseline_model.predict_proba(X_test)[:, 1]
+    baseline_probs = baseline_model.predict_proba(X_test_scaled)[:, 1]
     baseline_preds = (baseline_probs >= 0.5).astype(int)
     
     print("Logistic Regression Baseline Classification Report:")
     print(classification_report(y_test, baseline_preds))
     
     print("\n=== GENERATING VISUAL ARTIFACTS ===")
-    primary_probs = model.predict_proba(X_test)[:, 1]
-    primary_preds = (primary_probs >= optimal_threshold).astype(int)
+    if primary_probs is None:
+        primary_probs = model.predict_proba(X_test)[:, 1]
+    if primary_preds is None:
+        primary_preds = (primary_probs >= optimal_threshold).astype(int)
     
     fig, ax = plt.subplots(1, 2, figsize=(14, 6), facecolor='white')
     

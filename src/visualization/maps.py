@@ -4,12 +4,13 @@ import geopandas as gpd
 import pandas as pd
 import xarray as xr
 import numpy as np
-from src.config import RAW_DIR, Config
+from src.config import Config
 from matplotlib.colors import ListedColormap
 from shapely.geometry import Point 
 
 import matplotlib.animation as animation
 
+cfg = Config()
 def plot_month_map(
     df: pd.DataFrame,
     year: int,
@@ -206,9 +207,24 @@ def create_bivariate_map(
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.show()
 
-def animate_risk_over_time(df, year, output_file='risk_animation.gif'):
-    months = sorted(df['month'].unique())
-    fig, ax = plt.subplot(figsize=(10, 6))
+def animate_risk_over_time(df, year, output_file=cfg.risk_map_animation_output):
+    if 'valid_time' not in df.columns:
+        print("DataFrame must have a 'valid_time' column.")
+        return
+
+    df_year = df[df['valid_time'].dt.year == year].copy()
+    if df_year.empty:
+        print(f"No data for year {year}. Cannot create animation.")
+        return
+
+    if 'month' not in df_year.columns:
+        df_year['month'] = df_year['valid_time'].dt.month
+
+    months = sorted(df_year['month'].unique())
+    if len(months) == 0:
+        print(f"No month data for year {year}. Cannot create animation.")
+        return
+    fig, ax = plt.subplots(figsize=(10, 6))
     
     def update(month):
         ax.clear()
@@ -220,17 +236,20 @@ def animate_risk_over_time(df, year, output_file='risk_animation.gif'):
         subset = subset.copy()
         subset['x_rounded'] = subset['x'].round(2)
         subset['y_rounded'] = subset['y'].round(2)
-        risk_grid = subset.pivot(index='y_rounded', columns='x_rounded', values='fire_probability')
+        risk_grid = subset.pivot(
+            index='y_rounded', 
+                                 columns='x_rounded', values='fire_probability', aggfunc='mean')
         xmin, xmax = risk_grid.columns.min(), risk_grid.columns.max()
         ymin, ymax = risk_grid.index.min(), risk_grid.index.max()
         
-        ax.imshow(risk_grid.values, origin='lower', extent=[xmin, xmax, ymin, ymax],
+        im = ax.imshow(risk_grid.values, origin='lower', extent=[xmin, xmax, ymin, ymax],
                   cmap='plasma', vmin=0, vmax=1)
         ax.set_title(f"Fire probability - {month}/{year}")
         ax.set_xlabel("Longitude")
         ax.set_ylabel("Latitude")
         
         ax.grid(True, linestyle='--', alpha=0.3)
+        return im
         
     ani = animation.FuncAnimation(fig, update, frames=months, repeat=True)
     ani.save(output_file, writer='pillow', fps=1)

@@ -17,17 +17,22 @@ class WildfirePipeline:
     def __init__(
         self, model_factory, use_lag: bool, 
         tune: bool, params: dict = None, downsample_ratio: int = 10,
-        use_smote: bool = False, smote_ratio: float = 0.5
+        use_smote: bool = False, smote_ratio: float = 0.5, feature_group: str = 'all',
+        use_compounding_features: bool = False
     ):
         self.model_factory = model_factory
         self.use_lag = use_lag
         self.tune = tune
         self.params = params or {}
-        self.downsample_ratio = downsample_ratio
         self.use_smote = use_smote
+        self.use_compounding_features = use_compounding_features
+        
+        self.downsample_ratio = downsample_ratio
         self.smote_ratio = smote_ratio
+        
         self.features = None
         self.model = None
+        self.feature_group = feature_group
         
     def load_data(self):
         df = data_loader.load_master_dataset()
@@ -36,33 +41,41 @@ class WildfirePipeline:
         return data_loader.prepare_features(df)
     
     def build_features(self):
-        base = [
-            "dem", 
-            "landcover", 
-            "ghm", 
-            "slope", 
-            "sm1", 
-            "wind_speed", 
-            "pop_density", 
-            "dist_oil_gas", 
-            "peatland",
-            "month"
+        base = [ ... ]
+        extra = [ ... ]
+        
+        all_features = base + extra
+        
+        natural_features = [
+            "dem", "landcover", "slope", "sm1", 
+            "wind_speed", "peatland", "month",
+            "month_sin", "month_cos"
+        ]
+        
+        anthropogenic_features = [
+            "ghm", "dist_oil_gas", "pop_density"
+        ]
+        
+        compounding_features = [
+            "vpd_ghm_interaction", "ghm_windspeed_interaction"
         ]
         
         if self.use_lag:
-            extra = [
-                "temp_lag1",
-                "vpd_lag1",
-                "precip_lag1",
-                "vpd_ghm_interaction_lag1",
-            ]
+            natural_features.extend(["temp_lag1", "vpd_lag1", "precip_lag1"])
         else:
-            extra = [
-                "temp",
-                "vpd",
-                "precip",
-                "vpd_ghm_interaction"
-            ]
+            natural_features.extend([
+                "temp", "vpd", "precip", "temp_precip_interaction",
+            ])
+            
+        if self.use_compounding_features:
+            self.features = [f for f in all_features if f in compounding_features]
+                        
+        if self.feature_group == "natural":
+            self.features = [f for f in all_features if f in natural_features]
+        elif self.feature_group == "anthropogenic":
+            self.features = [f for f in all_features if f in anthropogenic_features]
+        else:
+            self.features = all_features
             
         self.features = base + extra
         
@@ -139,15 +152,35 @@ class WildfirePipeline:
                 self.model = XGBClassifier(**model_params)
         else:
             self.model = self.model_factory()
-            
-        self.model.fit(X_train, y_train)
+        class CalibratedXGB:
+            def __init__(self, base_model, calibrator):
+                self.base_model = base_model
+                self.calibrator = calibrator
+                self.feature_importances_ = base_model.feature_importances_
+
+            def predict_proba(self, X):
+                return self.calibrator.predict_proba(X)
+        self.base_model = self.model
+        from sklearn.calibration import CalibratedClassifierCV
+        
+        self.base_model.fit(X_train, y_train)
+        calibrator = CalibratedClassifierCV(
+            estimator=self.base_model,
+            method='sigmoid',
+            cv=3
+        )
+        calibrator.fit(X_val, y_val)
+
+        self.model = CalibratedXGB(self.base_model, calibrator)
         
         X_test = test[self.features]
         y_test = test['fire']
-        optimal_threshold = tr.evaluate_model(self.model, X_test, y_test, self.features)
 
+        probs = self.model.predict_proba(X_test)[:, 1]
+
+        optimal_threshold = tr.evaluate_model(self.model, X_test, y_test, self.features)
         test_probs = self.model.predict_proba(X_test)[:, 1]
-        test_preds = (test_probs >= optimal_threshold).astype(int)
+        test_preds = (test_probs >= optimal_threshold).astype(int)        
         
         self._evaluate_by_year_type(test, test_probs, optimal_threshold)
         tr.generate_evaluation_artifacts(

@@ -62,21 +62,28 @@ def load_master_dataset():
     df = df[~df['landcover'].isin(cfg.NON_BURNABLE_CLASSES_LC)]
     return df
 
+def create_new_features(df: pd.DataFrame):
+    df["vpd_ghm_interaction"] = df["vpd"] * df["ghm"]
+    df["month"] = df["valid_time"].dt.month
+    df["month_sin"] = np.sin(2 * np.pi * df['month'] / 12)
+    df["month_cos"] = np.cos(2 * np.pi * df['month'] / 12)
+    df["temp_precip_interaction"] = df["temp"] * df["precip"]
+    df["ghm_windspeed_interaction"] = df["ghm"] * df["wind_speed"]
+    return df
+    
+
 def create_lag_features(df: pd.DataFrame):
     df["vpd_lag1"] = df.groupby(["y", "x"])["vpd"].shift(1)
     df["temp_lag1"] = df.groupby(["y", "x"])["temp"].shift(1)
     df["precip_lag1"] = df.groupby(["y", "x"])["precip"].shift(1)
     df["vpd_ghm_interaction_lag1"] = df["vpd_lag1"] * df["ghm"]
-    df["vpd_ghm_interaction"] = df["vpd"] * df["ghm"]
-    df["month"] = df["valid_time"].dt.month
-    df["month_sin"] = np.sin(2 * np.pi * df['month'] / 12)
-    df["month_cos"] = np.cos(2 * np.pi * df['month'] / 12)
     
     return df
 
 def prepare_features(df: pd.DataFrame):
     df = df.sort_values(["y", "x", "valid_time"])        
     df = create_lag_features(df)
+    df = create_new_features(df)
     
     df = df.dropna(subset=[
         "temp_lag1",

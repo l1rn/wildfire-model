@@ -29,8 +29,7 @@ class Config:
 
         self.config_file = data
         self.production_mode = data["production"]
-
-    WILDFIRE_SEASON_MONTHS = list(range(6, 9))
+    WILDFIRE_SEASON_MONTHS = list(range(5, 10))
     NON_BURNABLE_CLASSES_LC = [50, 70, 80]
     RANDOM_SEED = 42
     BALANCED_RATIO = 10

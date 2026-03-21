@@ -207,52 +207,90 @@ def create_bivariate_map(
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.show()
 
-def animate_risk_over_time(df, year, output_file=cfg.risk_map_animation_output):
+def animate_risk_over_time(
+    df, years=None, output_file=cfg.risk_map_animation_output, fps=2, boundary_geojson = cfg.khmao_geojson
+    ):
     if 'valid_time' not in df.columns:
         print("DataFrame must have a 'valid_time' column.")
         return
-
-    df_year = df[df['valid_time'].dt.year == year].copy()
-    if df_year.empty:
-        print(f"No data for year {year}. Cannot create animation.")
+    df['year_month'] = df['valid_time'].dt.to_period('M')
+    time_points = sorted(df['year_month'].unique())
+    if len(time_points) == 0:
+        print("No time data available.")
         return
 
-    if 'month' not in df_year.columns:
-        df_year['month'] = df_year['valid_time'].dt.month
+    if years is not None:
+        df = df[df['valid_time'].dt.year.isin(years)].copy()
+        if df.empty:
+            print(f"No data for years {years}. Cannot create animation.")
+            return
 
-    months = sorted(df_year['month'].unique())
-    if len(months) == 0:
-        print(f"No month data for year {year}. Cannot create animation.")
+    df['year_month'] = df['valid_time'].dt.to_period('M')
+    time_points = sorted(df['year_month'].unique())
+    if len(time_points) == 0:
+        print("No time data available.")
         return
+    
+    df['x_round'] = df['x'].round(2)
+    df['y_round'] = df['y'].round(2)
+    
+    xs = sorted(df['x_round'].unique())
+    ys = sorted(df['y_round'].unique())
+
+    boundary = gpd.read_file(boundary_geojson)
+    if boundary.crs is None:
+        boundary = boundary.set_crs('EPSG:4326')
+    elif boundary.crs.to_epsg() != 4326:
+        boundary = boundary.to_crs('EPSG:4326')
+    boundary = boundary.dissolve()
+    geom = boundary.geometry.iloc[0]
+    
+    mask = np.zeros((len(ys), len(xs)), dtype=bool)
+    for i, x in enumerate(xs):
+        for j, y in enumerate(ys):
+            if geom.contains(Point(x, y)):
+                mask[j, i] = True 
+    
+    mask_df = pd.DataFrame(mask, index=ys, columns=xs)
+    mask_df = mask_df.sort_index(axis=0).sort_index(axis=1)
+    
+    xmin, xmax = xs[0], xs[-1]
+    ymin, ymax = ys[0], ys[-1]
+
+    cmap = plt.cm.plasma
+    cmap.set_bad(alpha=0) 
     fig, ax = plt.subplots(figsize=(10, 6))
     
-    def update(month):
+    def update(t):
         ax.clear()
-        subset = df[df['month'] == month]
+        subset = df[df['year_month'] == t]
         
         if subset.empty:
-            return
-        
-        subset = subset.copy()
-        subset['x_rounded'] = subset['x'].round(2)
-        subset['y_rounded'] = subset['y'].round(2)
-        risk_grid = subset.pivot(
-            index='y_rounded', 
-                                 columns='x_rounded', values='fire_probability', aggfunc='mean')
-        xmin, xmax = risk_grid.columns.min(), risk_grid.columns.max()
-        ymin, ymax = risk_grid.index.min(), risk_grid.index.max()
-        
-        im = ax.imshow(risk_grid.values, origin='lower', extent=[xmin, xmax, ymin, ymax],
-                  cmap='plasma', vmin=0, vmax=1)
-        ax.set_title(f"Fire probability - {month}/{year}")
+            dummy_grid = np.zeros((10, 10))
+            im = ax.imshow(dummy_grid, origin='lower',
+                           extent=[xmin, xmax, ymin, ymax],
+                           cmap=cmap, vmin=0, vmax=1)
+            ax.set_title(f"Fire probability – {t} (no data)")
+        else:
+            risk_grid = subset.pivot_table(
+                index='y_round', columns='x_round', values='fire_probability', aggfunc='mean'
+            ).sort_index(axis=0).sort_index(axis=1)
+            risk_grid = risk_grid.fillna(0)
+            risk_grid = risk_grid.where(mask_df, np.nan)
+            risk_grid = risk_grid.sort_index(axis=0).sort_index(axis=1)
+            
+            im = ax.imshow(risk_grid.values, origin='lower',
+                            extent=[risk_grid.columns.min(), risk_grid.columns.max(),
+                                    risk_grid.index.min(), risk_grid.index.max()],
+                            cmap=cmap, vmin=0, vmax=1)
+            ax.set_title(f"Fire probability – {t}")
         ax.set_xlabel("Longitude")
         ax.set_ylabel("Latitude")
-        
         ax.grid(True, linestyle='--', alpha=0.3)
         return im
         
-    ani = animation.FuncAnimation(fig, update, frames=months, repeat=True)
-    ani.save(output_file, writer='pillow', fps=1)
+    ani = animation.FuncAnimation(fig, update, frames=time_points, repeat=False, interval=1000/fps)
+    ani.save(output_file, writer='pillow', fps=fps)
     plt.close()
     print(f"Animation saved to {output_file}")
         

@@ -1,2 +1,3 @@
 # Wildfire predictive model
-![](docs/wildfire_risk_july_2025.jpg)
+Animation risk from 2016 to 2025 (May to September)
+![](data/processed/animation_risk_map.gif)

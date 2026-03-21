@@ -287,7 +287,7 @@ class WildfirePipeline:
         if "Visualize Risk-map" in options:
             self.visualize(model, test)
         if "SHAP Explanation Bar & Summary" in options:
-            tr.explain_model_with_shap(model, test[self.features])
+            tr.explain_model_with_shap(model.base_model, test[self.features])
         if "Generate Partial Dependence Plots (PDP)" in options:
             tr.generate_partial_dependence_plots(model, test[self.features])
         if "Save the map in TIFF format for QGIS" in options:
@@ -295,4 +295,17 @@ class WildfirePipeline:
         if "Create Bivarite Map GHM & VPD" in options:
             maps.create_bivariate_map(test)
         if "Animate Risk Over Time" in options:
-            maps.animate_risk_over_time(test, year=2024)
+            df_full = df.copy() 
+            X_full = df_full[self.features]
+
+            probs = model.predict_proba(X_full)[:, 1]
+            print(f"Probability array shape: {probs.shape}")
+
+            df_full['fire_probability'] = probs
+
+            if 'fire_probability' not in df_full.columns:
+                print("ERROR: fire_probability column was not added!")
+            else:
+                print("fire_probability column added successfully.")
+                print(df_full[['valid_time', 'fire_probability', 'x', 'y']].head())
+            maps.animate_risk_over_time(df_full, years=None, output_file=cfg.risk_map_animation_output)

@@ -98,7 +98,7 @@ def wildfire_pipeline():
                 
             pipeline = WildfirePipeline(
                 factory, 
-                use_lag, 
+                use_lag=use_lag, 
                 tune=False, 
                 params=best_params,
                 use_smote=True,
@@ -113,13 +113,7 @@ def wildfire_pipeline():
                 tune=True
             ) 
         pipeline.run()
-        metrics = pipeline.get_metrics()
-        results[group] = metrics
-        
-    df_results = pd.DataFrame(results).T
-    latex_code = df_results.to_latex(float_format="%.3f")
-    print(latex_code)
-    
+
 def temperature_pipeline():
     pipeline = TemperaturePipeline()
     pipeline.run()

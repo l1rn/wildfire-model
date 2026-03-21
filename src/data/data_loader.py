@@ -57,10 +57,9 @@ def load_master_dataset():
     df["valid_time"] = pd.to_datetime(df["valid_time"])
     df['month'] = df['valid_time'].dt.month
     
-    df = df[~df['month'].isin(cfg.WILDFIRE_SEASON_MONTHS)]
+    df = df[df['month'].isin(cfg.WILDFIRE_SEASON_MONTHS)]
     
     df = df[~df['landcover'].isin(cfg.NON_BURNABLE_CLASSES_LC)]
-    df = df[df['is_extreme_year'] == 1]
     return df
 
 def create_new_features(df: pd.DataFrame):

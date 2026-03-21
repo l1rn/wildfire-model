@@ -1,5 +1,5 @@
 import pandas as pd
-
+from pathlib import Path
 from sklearn.metrics import (
     roc_auc_score, 
     classification_report, 
@@ -237,7 +237,11 @@ def generate_forecast(
 def explain_model_with_shap(model, X_test):
     if hasattr(model, "best_estimator_"):
         model = model.best_estimator_
-    
+    if hasattr(model, "base_estimator"):
+        model = model.base_estimator
+    if hasattr(model, "estimator"):
+        model = model.estimator
+        
     X_test = X_test.copy()
     explainer = shap.TreeExplainer(model)
     
@@ -250,12 +254,14 @@ def explain_model_with_shap(model, X_test):
     plt.figure()
     shap.summary_plot(shap_values, X_sample, show=False)
     plt.title("SHAP Feature Importance (Impact on Model Output)")
-    plt.savefig("shap_summary_plot.png", bbox_inches='tight', dpi=300)
+    shap_summary_path = Path(PROCESSED_DIR) / "shap" / "shap_summary_plot.png"
+    plt.savefig(shap_summary_path, bbox_inches='tight', dpi=300)
     plt.close()
     
     plt.figure()
     shap.plots.bar(shap_values, show=False)
-    plt.savefig("shap_bar_plot.png", bbox_inches='tight', dpi=300)
+    shap_bar_path = Path(PROCESSED_DIR) / "shap" / "shap_bar_plot.png"
+    plt.savefig(shap_bar_path, bbox_inches='tight', dpi=300)
     plt.close()
 
     print("SHAP plots saved as 'shap_summary_plot.png' and 'shap_bar_plot.png'")

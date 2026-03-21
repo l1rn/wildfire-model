@@ -60,6 +60,7 @@ def load_master_dataset():
     df = df[~df['month'].isin(cfg.WILDFIRE_SEASON_MONTHS)]
     
     df = df[~df['landcover'].isin(cfg.NON_BURNABLE_CLASSES_LC)]
+    df = df[df['is_extreme_year'] == 1]
     return df
 
 def create_new_features(df: pd.DataFrame):

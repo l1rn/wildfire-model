@@ -6,6 +6,8 @@ from src.cli import menu
 from src.pipelines import WildfirePipeline, TemperaturePipeline
 from src.config import Config 
 
+import pandas as pd
+
 import src.preprocessing as preprocessing
 from src.visualization.maps import plot_historical_fires, plot_landcover_map
 
@@ -86,28 +88,37 @@ def summarize_cv():
 def wildfire_pipeline():
     model_name, factory = menu.choose_model()
     use_lag = int(input("Use lag features(yes - 1 / no - 0): "))
-    if cfg.production_mode:
-        import json
-        with open(cfg.xgboost_params, 'r') as f:
-            best_params = json.load(f)
-            
-        pipeline = WildfirePipeline(
-            factory, 
-            use_lag, 
-            tune=False, 
-            params=best_params,
-            use_smote=True,
-            downsample_ratio=3,
-            smote_ratio=0.5
-        )
-    else:
-        pipeline = WildfirePipeline(
-            factory, 
-            use_lag, 
-            tune=True
-        )
-
-    pipeline.run()
+    groups = ["all"]
+    results = {}
+    for group in groups:
+        if cfg.production_mode:
+            import json
+            with open(cfg.xgboost_params, 'r') as f:
+                best_params = json.load(f)
+                
+            pipeline = WildfirePipeline(
+                factory, 
+                use_lag, 
+                tune=False, 
+                params=best_params,
+                use_smote=True,
+                downsample_ratio=3,
+                smote_ratio=0.5,
+                feature_group=group,
+            )
+        else:
+            pipeline = WildfirePipeline(
+                factory, 
+                use_lag, 
+                tune=True
+            ) 
+        pipeline.run()
+        metrics = pipeline.get_metrics()
+        results[group] = metrics
+        
+    df_results = pd.DataFrame(results).T
+    latex_code = df_results.to_latex(float_format="%.3f")
+    print(latex_code)
     
 def temperature_pipeline():
     pipeline = TemperaturePipeline()

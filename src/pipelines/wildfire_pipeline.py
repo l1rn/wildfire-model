@@ -5,7 +5,14 @@ from src.config import Config
  
 import pandas as pd
 import questionary
-from sklearn.metrics import precision_recall_curve, roc_auc_score, classification_report
+from sklearn.metrics import (
+    precision_recall_curve, 
+    roc_auc_score, 
+    classification_report, 
+    precision_score,
+    f1_score,
+    recall_score
+)
 
 from sklearn.model_selection import RandomizedSearchCV, PredefinedSplit
 from imblearn.over_sampling import SMOTE
@@ -18,14 +25,12 @@ class WildfirePipeline:
         self, model_factory, use_lag: bool, 
         tune: bool, params: dict = None, downsample_ratio: int = 10,
         use_smote: bool = False, smote_ratio: float = 0.5, feature_group: str = 'all',
-        use_compounding_features: bool = False
     ):
         self.model_factory = model_factory
         self.use_lag = use_lag
         self.tune = tune
         self.params = params or {}
         self.use_smote = use_smote
-        self.use_compounding_features = use_compounding_features
         
         self.downsample_ratio = downsample_ratio
         self.smote_ratio = smote_ratio
@@ -41,43 +46,45 @@ class WildfirePipeline:
         return data_loader.prepare_features(df)
     
     def build_features(self):
-        base = [ ... ]
-        extra = [ ... ]
-        
-        all_features = base + extra
-        
-        natural_features = [
+        base = [
             "dem", "landcover", "slope", "sm1", 
-            "wind_speed", "peatland", "month",
-            "month_sin", "month_cos"
+            "wind_speed", "peatland", "month"
         ]
-        
-        anthropogenic_features = [
-            "ghm", "dist_oil_gas", "pop_density"
-        ]
-        
-        compounding_features = [
-            "vpd_ghm_interaction", "ghm_windspeed_interaction"
-        ]
-        
+
         if self.use_lag:
-            natural_features.extend(["temp_lag1", "vpd_lag1", "precip_lag1"])
+            extra = [
+                "temp_lag1", "vpd_lag1", "precip_lag1",
+                "vpd_ghm_interaction_lag1"
+            ]
         else:
-            natural_features.extend([
-                "temp", "vpd", "precip", "temp_precip_interaction",
-            ])
-            
-        if self.use_compounding_features:
-            self.features = [f for f in all_features if f in compounding_features]
-                        
-        if self.feature_group == "natural":
-            self.features = [f for f in all_features if f in natural_features]
+            extra = [
+                "temp", "vpd", "precip"            
+            ]
+
+        engineered = [
+            "month_sin", "month_cos",
+            "vpd_ghm_interaction",       
+            "ghm_windspeed_interaction",
+            "temp_precip_interaction" 
+        ]
+
+        anthropogenic = [
+            "dist_oil_gas", "pop_density", "ghm"
+        ]
+
+        all_candidates = base + extra + engineered + anthropogenic
+
+        all_candidates = list(dict.fromkeys(all_candidates))
+
+        if self.feature_group == "compounding":
+            self.features = [f for f in all_candidates if f in engineered]
+        elif self.feature_group == "natural":
+            natural = base + extra
+            self.features = [f for f in all_candidates if f in natural]
         elif self.feature_group == "anthropogenic":
-            self.features = [f for f in all_features if f in anthropogenic_features]
-        else:
-            self.features = all_features
-            
-        self.features = base + extra
+            self.features = [f for f in all_candidates if f in {"dist_oil_gas", "pop_density", "ghm"}]
+        else: 
+            self.features = all_candidates
         
     def train(self, df):
         train, val, test  = split.temporal_split(df)       
@@ -203,6 +210,14 @@ class WildfirePipeline:
         )
         test_full = test.copy()
         test_full["fire_probability"] = test_probs
+        
+        self.metrics = {
+            "precision": precision_score(y_test, test_preds),
+            "recall": recall_score(y_test, test_preds),
+            "f1": f1_score(y_test, test_preds),
+            "roc_auc": roc_auc_score(y_test, test_preds),
+            "threshold": optimal_threshold
+        }
         return self.model, test_full
     
     def _evaluate_by_year_type(self, test_df, probs, threshold):
@@ -248,11 +263,15 @@ class WildfirePipeline:
             month=7,
             filename="khmao.tif"
         )
+        
+    def get_metrics(self):
+        return self.metrics
                 
     def run(self):
         df = self.load_data()
         self.build_features()
         model, test = self.train(df)
+        
         options = questionary.checkbox(
             "Select options:",
             choices=[

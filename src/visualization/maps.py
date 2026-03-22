@@ -178,17 +178,23 @@ def create_bivariate_map(
     ].copy()
     
     if subset.empty:
-        print("⚠️ No data for July 2022. Using the entire dataset instead.")
+        print("No data for July 2022. Using the entire dataset instead.")
         subset = df.copy()
 
-    print("⚙️ Converting grid points to spatial geometries...")
-    geometry = [Point(xy) for xy in zip(subset['x'], subset['y'])]
-    gdf = gpd.GeoDataFrame(subset, geometry=geometry, crs="EPSG:4326")
+    print("Converting grid points to spatial geometries...")
+    res = 0.05
+    subset['x_grid'] = (subset['x'] / res).round() * res
+    subset['y_grid'] = (subset['y'] / res).round() * res
     
-    gdf['vpd_class'] = pd.qcut(gdf[var1].rank(method='first'), 3, labels=[0, 1, 2])
-    gdf['ghm_class'] = pd.qcut(gdf[var2].rank(method='first'), 3, labels=[0, 1, 2])
+    grid = subset.groupby(['x_grid', 'y_grid']).agg({
+        var1: 'mean',
+        var2: 'mean'
+    }).reset_index()
     
-    gdf['bivariate_class'] = gdf['vpd_class'].astype(str) + gdf['ghm_class'].astype(str)
+    
+    grid[f'{var1}_class'] = pd.qcut(grid[var1].rank(method='first'), 3, labels=[0, 1, 2])
+    grid[f'{var2}_class'] = pd.qcut(grid[var2].rank(method='first'), 3, labels=[0, 1, 2])
+    grid['bivariate_class'] = grid[f'{var1}_class'].astype(str) + grid[f'{var2}_class'].astype(str)
     
     color_dict = {
         '00': '#e8e8e8', '10': '#e4acac', '20': '#c85a5a',
@@ -196,11 +202,18 @@ def create_bivariate_map(
         '02': '#64acbe', '12': '#627f8c', '22': '#574249' 
     }
     
-    gdf['color'] = gdf['bivariate_class'].map(color_dict)
+    grid['color'] = grid['bivariate_class'].map(color_dict)
+    gdf = gpd.GeoDataFrame(
+        grid, 
+        geometry=gpd.points_from_xy(grid.x_grid, grid.y_grid), 
+        crs="EPSG:4326"
+    )
+    
+    boundary = gpd.read_file(cfg.khmao_geojson)
+    gdf = gdf.clip(boundary)
     
     fig, ax = plt.subplots(1, 1, figsize=(12, 10))
-    gdf.plot(color=gdf['color'], edgecolor='none', ax=ax)
-    
+    gdf.plot(color=gdf['color'], edgecolor='none', ax=ax)    
     ax.set_title("Synergistic Wildfire Drivers: VPD and Human Modification", fontsize=16)
     ax.set_axis_off()
     

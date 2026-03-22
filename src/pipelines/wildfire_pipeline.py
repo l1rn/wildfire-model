@@ -173,7 +173,7 @@ class WildfirePipeline:
         self.base_model.fit(X_train, y_train)
         calibrator = CalibratedClassifierCV(
             estimator=self.base_model,
-            method='sigmoid',
+            method='isotonic',
             cv=3
         )
         calibrator.fit(X_val, y_val)
@@ -190,24 +190,17 @@ class WildfirePipeline:
         test_preds = (test_probs >= optimal_threshold).astype(int)        
         
         self._evaluate_by_year_type(test, test_probs, optimal_threshold)
-        tr.generate_evaluation_artifacts(
-            model=self.model,
-            X_train=X_train,
-            y_train=y_train,
-            X_test=X_test,
-            y_test=y_test,
-            optimal_threshold=optimal_threshold,
-            primary_probs=test_probs,          
-            primary_preds=test_preds
-        )
-        
-        tr.generate_spatial_reliability_map(
-            X_test=X_test,
-            y_test=y_test,
-            probs=test_probs,
-            optimal_threshold=optimal_threshold,
-            original_df=test    
-        )
+        # tr.generate_evaluation_artifacts(
+        #     model=self.model,
+        #     X_train=X_train,
+        #     y_train=y_train,
+        #     X_test=X_test,
+        #     y_test=y_test,
+        #     optimal_threshold=optimal_threshold,
+        #     primary_probs=test_probs,          
+        #     primary_preds=test_preds
+        # )
+    
         test_full = test.copy()
         test_full["fire_probability"] = test_probs
         
@@ -218,7 +211,7 @@ class WildfirePipeline:
             "roc_auc": roc_auc_score(y_test, test_preds),
             "threshold": optimal_threshold
         }
-        return self.model, test_full
+        return self.model, test_full, optimal_threshold
     
     def _evaluate_by_year_type(self, test_df, probs, threshold):
         extreme = test_df[test_df['is_extreme_year'] == 1]
@@ -270,7 +263,20 @@ class WildfirePipeline:
     def run(self):
         df = self.load_data()
         self.build_features()
-        model, test = self.train(df)
+        model, test, optimal_threshold = self.train(df)
+        df_full = df.copy() 
+        X_full = df_full[self.features]
+
+        probs = model.predict_proba(X_full)[:, 1]
+        print(f"Probability array shape: {probs.shape}")
+
+        df_full['fire_probability'] = probs
+
+        if 'fire_probability' not in df_full.columns:
+            print("ERROR: fire_probability column was not added!")
+        else:
+            print("fire_probability column added successfully.")
+            print(df_full[['valid_time', 'fire_probability', 'x', 'y']].head())
         
         options = questionary.checkbox(
             "Select options:",
@@ -278,6 +284,7 @@ class WildfirePipeline:
                 "SHAP Explanation Bar & Summary",
                 "Visualize Risk-map",
                 "Generate Partial Dependence Plots (PDP)",
+                "Spatial Reliability Map",
                 "Save the map in TIFF format for QGIS",
                 "Create Bivarite Map GHM & VPD",
                 "Animate Risk Over Time"
@@ -285,27 +292,20 @@ class WildfirePipeline:
         ).ask()
         
         if "Visualize Risk-map" in options:
-            self.visualize(model, test)
+            self.visualize(model.base_model, df_full)
         if "SHAP Explanation Bar & Summary" in options:
             tr.explain_model_with_shap(model.base_model, test[self.features])
         if "Generate Partial Dependence Plots (PDP)" in options:
-            tr.generate_partial_dependence_plots(model, test[self.features])
+            tr.generate_partial_dependence_plots(model.base_model, test[self.features])
         if "Save the map in TIFF format for QGIS" in options:
             self.save(test)
         if "Create Bivarite Map GHM & VPD" in options:
-            maps.create_bivariate_map(test)
+            maps.create_bivariate_map(df_full, var1='vpd', var2='ghm')
+        if "Spatial Reliability Map" in options:
+            tr.generate_spatial_reliability_map(
+                original_df=df_full,
+                resolution=0.05,
+                n_classes=4
+            )
         if "Animate Risk Over Time" in options:
-            df_full = df.copy() 
-            X_full = df_full[self.features]
-
-            probs = model.predict_proba(X_full)[:, 1]
-            print(f"Probability array shape: {probs.shape}")
-
-            df_full['fire_probability'] = probs
-
-            if 'fire_probability' not in df_full.columns:
-                print("ERROR: fire_probability column was not added!")
-            else:
-                print("fire_probability column added successfully.")
-                print(df_full[['valid_time', 'fire_probability', 'x', 'y']].head())
             maps.animate_risk_over_time(df_full, years=None, output_file=cfg.risk_map_animation_output)

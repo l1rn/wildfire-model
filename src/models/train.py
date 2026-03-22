@@ -11,11 +11,15 @@ from sklearn.metrics import (
 )
 from sklearn.linear_model import LogisticRegression
 from sklearn.inspection import PartialDependenceDisplay
-from src.config import PROCESSED_DIR
+from src.config import PROCESSED_DIR, Config
 import matplotlib.pyplot as plt
 import shap
 import numpy as np
+import geopandas as gpd
 from sklearn.preprocessing import StandardScaler
+import matplotlib.colors as colors
+
+cfg = Config()
 
 def train_model(model, X_train, y_train):
     model.fit(X_train, y_train)
@@ -83,58 +87,74 @@ def generate_evaluation_artifacts(
     plt.savefig(output_filename, dpi=300)
     
 def generate_spatial_reliability_map(
-    X_test, y_test, probs, optimal_threshold, original_df
+    original_df, resolution=0.05, n_classes=4
 ):  
-    x_coords = original_df.loc[X_test.index, 'x'].values
-    y_coords = original_df.loc[X_test.index, 'y'].values
-    results_df = pd.DataFrame({
-        'x': x_coords,
-        'y': y_coords,
-        'probability': probs,
-        'observed_fire': y_test.values
-    })
+    df = original_df.copy()
+    df = df[df['year'] == 2022]
+    df['x_grid'] = (df['x'] / resolution).round() * resolution
+    df['y_grid'] = (df['y'] / resolution).round() * resolution
     
-    fig, ax = plt.subplots(figsize=(14, 8), facecolor='white')
-    
-    sc = ax.scatter(
-        results_df['x'], 
-        results_df['y'], 
-        c=results_df['probability'], 
-        cmap='YlOrRd', 
-        s=15, 
-        alpha=0.4,
-        edgecolors='none',
-        label='Predicted Probability Surface'
+    grid = df.groupby(['x_grid', 'y_grid']).agg({
+        'fire_probability': 'median',
+        'fire': 'max'
+    }).reset_index()
+        
+    try:
+        grid['class'], _ = pd.qcut(
+            grid['fire_probability'],
+            n_classes,
+            labels=False,
+            retbins=True,
+            duplicates='drop'
+        )
+    except ValueError:
+        grid['prob_rank'] = grid['fire_probability'].rank(method='first')
+        grid['class'], _ = pd.qcut(
+            grid['prob_rank'],
+            n_classes,
+            labels=False,
+            retbins=True,
+            duplicates='drop'
+        )
+    colors = plt.cm.plasma(np.linspace(0, 1, n_classes))
+    grid['color'] = [colors[c] for c in grid['class']]
+
+    gdf = gpd.GeoDataFrame(
+        grid,
+        geometry=gpd.points_from_xy(grid.x_grid, grid.y_grid),
+        crs="EPSG:4326"
     )
+    if hasattr(cfg, 'khmao_geojson') and cfg.khmao_geojson:
+        boundary = gpd.read_file(cfg.khmao_geojson)
+        gdf = gdf.clip(boundary)
+
+    fig, ax = plt.subplots(figsize=(14, 8))
+    gdf.plot(ax=ax, color=gdf['color'], edgecolor='none', markersize=20, alpha=0.7)
+    fires = df[df['fire'] == 1]
+    ax.scatter(fires['x'], fires['y'],
+               marker='x', s=80, color='red', linewidths=2,
+               label='Observed fires (test set)')
     
-    observed_fires = results_df[results_df['observed_fire'] == 1]
-    ax.scatter(
-        observed_fires['x'],
-        observed_fires['y'], 
-        color='#000000',
-        marker='+', 
-        s=40, 
-        linewidths=1.5,
-        label='Observed Fire Hotspot (Ground Truth)'
-    )
+    from matplotlib.lines import Line2D
+    legend_elements = []
+    for i in range(n_classes):
+        label = f'Risk {i+1}'
+        legend_elements.append(Line2D([0], [0], marker='o', color='w',
+                                       label=label, markerfacecolor=colors[i],
+                                       markersize=8))
+    legend_elements.append(Line2D([0], [0], marker='x', color='red',
+                                  label='Observed fires', markersize=8))
+    ax.legend(handles=legend_elements, loc='upper right')
     
-    cbar = plt.colorbar(sc, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label('Algorithm Ignition Probability', fontsize=12)
-    cbar.ax.axhline(optimal_threshold, color='black', linestyle='--', linewidth=2)
-    cbar.ax.text(1.2, optimal_threshold, f'Threshold\n({optimal_threshold:.4f})', 
-                 va='center', ha='left', fontsize=10)
-    
-    ax.set_title('Spatial Reliability Analysis: Predicted Risk vs. Observed Ignitions', fontsize=16, pad=15)
+    ax.set_title('Spatial Reliability: Predicted Risk (Quantile Classes) vs. Observed Ignitions', fontsize= 16)   
     ax.set_xlabel('Longitude', fontsize=12)
     ax.set_ylabel('Latitude', fontsize=12)
     
-    handles, labels = ax.get_legend_handles_labels()
-    ax.legend(handles[-2:], labels[-2:], loc='upper right', framealpha=0.9)
-    
+    ax.legend(loc='upper right')
     ax.grid(True, linestyle='--', alpha=0.3)
     
     plt.tight_layout()
-    output_filename = "spatial_reliability_map.png"
+    output_filename = Path(PROCESSED_DIR) / "spatial_reliability_map.png"
     plt.savefig(output_filename, dpi=300)
     print(f"Spatial reliability map successfully exported as {output_filename}")
 
@@ -149,6 +169,7 @@ def generate_partial_dependence_plots(model, X_test, sample_size=10000, random_s
         X_eval = X_test.sample(n=sample_size, random_state=random_state)
     else:
         X_eval = X_test
+        
     features_to_plot = [
         'ghm', 
         'vpd', 
@@ -170,12 +191,24 @@ def generate_partial_dependence_plots(model, X_test, sample_size=10000, random_s
     fig.suptitle('Partial Dependence: Infrastructure Proximity vs. Synergistic Climate Effects', fontsize=16)
     plt.subplots_adjust(top=0.9)  
     
-    output_filename = "pdp_infrastructure_climate.png"
+    output_filename = Path(PROCESSED_DIR) / "pdp_infrastructure_climate.png"
     plt.savefig(output_filename, dpi=300, bbox_inches='tight')
     plt.close()
     
     print(f"Partial Dependence Plots saved successfully to {output_filename}")
     
+def generate_forecast(
+    model, 
+    df, 
+    features
+):
+    X = df[features]
+    probs = model.predict_proba(X)[:, 1]
+    
+    df = df.copy()
+    df["fire_probability"] = probs
+    return df
+
 def evaluate_model(model, X_test, y_test, features):
     probs = model.predict_proba(X_test)[:, 1]
     precisions, recalls, thresholds = precision_recall_curve(
@@ -221,18 +254,6 @@ def evaluate_model(model, X_test, y_test, features):
     print(importance)
     
     return optimal_threshold
-
-def generate_forecast(
-    model, 
-    df, 
-    features
-):
-    X = df[features]
-    probs = model.predict_proba(X)[:, 1]
-    
-    df = df.copy()
-    df["fire_probability"] = probs
-    return df
 
 def explain_model_with_shap(model, X_test):
     if hasattr(model, "best_estimator_"):

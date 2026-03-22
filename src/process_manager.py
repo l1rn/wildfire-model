@@ -116,10 +116,10 @@ def wildfire_pipeline():
                 smote_ratio=0.5
             ) 
         pipeline.run()
-        results[group] = pipeline.get_metrics()
+        # results[group] = pipeline.get_metrics()
     
-    df_table = pd.DataFrame(results).T
-    print(df_table)
+    # df_table = pd.DataFrame(results).T
+    # print(df_table)
 
 def temperature_pipeline():
     pipeline = TemperaturePipeline()

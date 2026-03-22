@@ -1,8 +1,9 @@
 from src.data import data_loader, split
 from src.models import train as tr
 from src.visualization import maps
-from src.config import Config
+from src.config import Config, PROCESSED_DIR
  
+from pathlib import Path
 import pandas as pd
 import questionary
 from sklearn.metrics import (
@@ -190,16 +191,16 @@ class WildfirePipeline:
         test_preds = (test_probs >= optimal_threshold).astype(int)        
         
         self._evaluate_by_year_type(test, test_probs, optimal_threshold)
-        # tr.generate_evaluation_artifacts(
-        #     model=self.model,
-        #     X_train=X_train,
-        #     y_train=y_train,
-        #     X_test=X_test,
-        #     y_test=y_test,
-        #     optimal_threshold=optimal_threshold,
-        #     primary_probs=test_probs,          
-        #     primary_preds=test_preds
-        # )
+        tr.generate_evaluation_artifacts(
+            model=self.model,
+            X_train=X_train,
+            y_train=y_train,
+            X_test=X_test,
+            y_test=y_test,
+            optimal_threshold=optimal_threshold,
+            primary_probs=test_probs,          
+            primary_preds=test_preds
+        )
     
         test_full = test.copy()
         test_full["fire_probability"] = test_probs
@@ -287,7 +288,8 @@ class WildfirePipeline:
                 "Spatial Reliability Map",
                 "Save the map in TIFF format for QGIS",
                 "Create Bivarite Map GHM & VPD",
-                "Animate Risk Over Time"
+                "Animate Risk Over Time",
+                "Calibration Plot"
             ]
         ).ask()
         
@@ -303,9 +305,15 @@ class WildfirePipeline:
             maps.create_bivariate_map(df_full, var1='vpd', var2='ghm')
         if "Spatial Reliability Map" in options:
             tr.generate_spatial_reliability_map(
-                original_df=df_full,
+                original_df=test,
                 resolution=0.05,
                 n_classes=4
+            )
+        if "Calibration Plot" in options:
+            y_test = test['fire']
+            probs = test['fire_probability']
+            tr.plot_calibration_curve(
+                y_test, probs, output_file=Path(PROCESSED_DIR) / "calibration_plot.png"
             )
         if "Animate Risk Over Time" in options:
             maps.animate_risk_over_time(df_full, years=None, output_file=cfg.risk_map_animation_output)

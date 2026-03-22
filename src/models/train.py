@@ -11,6 +11,8 @@ from sklearn.metrics import (
 )
 from sklearn.linear_model import LogisticRegression
 from sklearn.inspection import PartialDependenceDisplay
+from sklearn.calibration import calibration_curve
+
 from src.config import PROCESSED_DIR, Config
 import matplotlib.pyplot as plt
 import shap
@@ -20,10 +22,6 @@ from sklearn.preprocessing import StandardScaler
 import matplotlib.colors as colors
 
 cfg = Config()
-
-def train_model(model, X_train, y_train):
-    model.fit(X_train, y_train)
-    return model
 
 def generate_evaluation_artifacts(
     model,
@@ -83,14 +81,13 @@ def generate_evaluation_artifacts(
     )
     ax[1].set_title("Precision-Recall Curve Comparison", fontsize=14)
     plt.tight_layout()
-    output_filename = "evaluation_artifacts.png"
+    output_filename = Path(PROCESSED_DIR) / "evaluation_artifacts.png"
     plt.savefig(output_filename, dpi=300)
     
 def generate_spatial_reliability_map(
     original_df, resolution=0.05, n_classes=4
 ):  
     df = original_df.copy()
-    df = df[df['year'] == 2022]
     df['x_grid'] = (df['x'] / resolution).round() * resolution
     df['y_grid'] = (df['y'] / resolution).round() * resolution
     
@@ -286,3 +283,27 @@ def explain_model_with_shap(model, X_test):
     plt.close()
 
     print("SHAP plots saved as 'shap_summary_plot.png' and 'shap_bar_plot.png'")
+    
+def plot_calibration_curve(
+    y_true, y_proba, n_bins=10, 
+    output_file="calibration_plot.png"
+):
+    prob_true, prob_pred = calibration_curve(
+        y_true, y_proba, n_bins=n_bins, strategy='uniform'
+    )
+    
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.plot(prob_pred, prob_true, marker='o', linewidth=2, label='XGBoost (calibrated)')
+    ax.plot([0, 1], [0, 1], linestyle='--', color='gray', label='Perfect Calibration')
+    
+    ax.set_xlabel('Mean predicted probability')
+    ax.set_ylabel('Fraction of positives')
+    
+    ax.set_title('Calibration plot (reliability diagram)')
+    ax.legend(loc='best')
+    ax.grid(True)
+    
+    plt.tight_layout()
+    plt.savefig(output_file, dpi=300)
+    plt.close()
+    print(f"Calibration plot saved to {output_file}")

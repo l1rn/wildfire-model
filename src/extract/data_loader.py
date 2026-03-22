@@ -5,7 +5,6 @@ import geopandas as gpd
 import numpy as np
 from src.config import Config
 
-
 from typing import Optional
 import logging
 

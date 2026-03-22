@@ -1,4 +1,4 @@
-from src.data import data_loader
+from src.extract import data_loader
 from src.config import PROCESSED_DIR, RAW_DIR
 from src.collection import GeeExtractor
 from src.models import cross_validation, models
@@ -9,7 +9,7 @@ from src.config import Config
 import pandas as pd
 
 import src.preprocessing as preprocessing
-from src.visualization.maps import plot_historical_fires, plot_landcover_map
+from src.output.maps import plot_historical_fires, plot_landcover_map
 
 collection = GeeExtractor()
 cfg = Config()
@@ -88,7 +88,7 @@ def summarize_cv():
 def wildfire_pipeline():
     model_name, factory = menu.choose_model()
     use_lag = int(input("Use lag features(yes - 1 / no - 0): "))
-    groups = ["all"]
+    groups = ["all", "natural", "anthropogenic", "compounding"]
     results = {}
     for group in groups:
         if cfg.production_mode:
@@ -116,10 +116,10 @@ def wildfire_pipeline():
                 smote_ratio=0.5
             ) 
         pipeline.run()
-        # results[group] = pipeline.get_metrics()
+        results[group] = pipeline.get_metrics()
     
-    # df_table = pd.DataFrame(results).T
-    # print(df_table)
+    df_table = pd.DataFrame(results).T
+    print(df_table)
 
 def temperature_pipeline():
     pipeline = TemperaturePipeline()

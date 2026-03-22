@@ -1,6 +1,6 @@
-from src.data import data_loader, split
-from src.models import train as tr
-from src.visualization import maps
+from src.extract import data_loader, split
+from src.output import train as tr
+from src.output import maps
 from src.config import Config, PROCESSED_DIR
  
 from pathlib import Path
@@ -184,8 +184,6 @@ class WildfirePipeline:
         X_test = test[self.features]
         y_test = test['fire']
 
-        probs = self.model.predict_proba(X_test)[:, 1]
-
         optimal_threshold = tr.evaluate_model(self.model, X_test, y_test, self.features)
         test_probs = self.model.predict_proba(X_test)[:, 1]
         test_preds = (test_probs >= optimal_threshold).astype(int)        
@@ -209,7 +207,7 @@ class WildfirePipeline:
             "precision": precision_score(y_test, test_preds),
             "recall": recall_score(y_test, test_preds),
             "f1": f1_score(y_test, test_preds),
-            "roc_auc": roc_auc_score(y_test, test_preds),
+            "roc_auc": roc_auc_score(y_test, test_probs),
             "threshold": optimal_threshold
         }
         return self.model, test_full, optimal_threshold

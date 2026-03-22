@@ -1,4 +1,4 @@
-from src.data import data_loader
+from src.extract import data_loader
 from src.config import RAW_DIR, PROCESSED_DIR, Config
 import numpy as np
 import pandas as pd

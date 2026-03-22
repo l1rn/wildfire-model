@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from src.data import data_loader
+from src.extract import data_loader
 from src.config import Config
 
 cfg = Config()

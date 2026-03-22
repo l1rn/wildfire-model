@@ -341,3 +341,58 @@ def save_to_geotiff(
     da_smooth.astype("float32").rio.to_raster(filename)
     
     print(f"Saved georeferenced TIF to {filename}")
+    
+def plot_time_series_risk(
+    df, output_file='time_series_risk.png', freq='M', tick_interval=6
+):
+    df = df.copy()
+    df['date'] = pd.to_datetime(df['valid_time'])
+    
+    if freq == 'M':
+        df['period'] = df['date'].dt.to_period('M')
+        xlabel = 'Month'
+        all_periods = sorted(df['period'].unique())
+        tick_indices = range(0, len(all_periods), tick_interval)
+        tick_labels = [str(p) for i, p in enumerate(all_periods) if i in tick_indices]
+        all_periods_str = [str(p) for p in all_periods]
+    else:
+        df['period'] = df['date'].dt.to_period('Y')
+        xlabel = 'Year'
+    
+    grouped = df.groupby('period').agg({
+        'fire_probability': 'sum',
+        'fire': 'sum'
+    }).reset_index()
+    
+    grouped = grouped.set_index('period').reindex(all_periods).reset_index()
+    grouped['period_str'] = [str(p) for p in grouped['period']]
+    
+    fig, ax1 = plt.subplots(figsize=(14, 6))
+    color = 'tab:red'
+    
+    ax1.bar(grouped['period_str'], grouped['fire'], color=color, alpha = 0.6, label='Observed Fires')
+    ax1.set_xlabel(xlabel)
+    ax1.set_ylabel('Observed fire count', color=color)
+    ax1.tick_params(axis='y', labelcolor=color)
+    
+    ax2 = ax1.twinx()
+    color = 'tab:blue'
+    ax2.plot(grouped['period_str'], grouped['fire_probability'], color=color, marker='o', linewidth=2, label='Sum of predicted probabilities')
+    ax2.set_ylabel('Sum of predicted probabilities', color=color)
+    ax2.tick_params(axis='y', labelcolor=color)
+    
+    ax1.set_xticks([grouped['period_str'][i] for i in tick_indices])
+    ax1.set_xticklabels(tick_labels, rotation=45, ha='right')
+    for tick in ax1.get_yticklabels():
+        tick.set_fontsize(9)
+    
+    plt.title('Time Series of Fire Risk: Predicted vs. Observed')
+    fig.tight_layout()
+    
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+    
+    plt.savefig(output_file, dpi=300)
+    plt.close()
+    print(f'Time Series plot saved to {output_file}')

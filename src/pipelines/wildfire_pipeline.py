@@ -289,7 +289,8 @@ class WildfirePipeline:
                 "Save the map in TIFF format for QGIS",
                 "Create Bivarite Map GHM & VPD",
                 "Animate Risk Over Time",
-                "Calibration Plot"
+                "Calibration Plot",
+                "Time Series of Predicted vs. Observed Fire Counts"
             ]
         ).ask()
         
@@ -315,5 +316,7 @@ class WildfirePipeline:
             tr.plot_calibration_curve(
                 y_test, probs, output_file=Path(PROCESSED_DIR) / "calibration_plot.png"
             )
+        if "Time Series of Predicted vs. Observed Fire Counts" in options:
+            maps.plot_time_series_risk(df_full, output_file=Path(PROCESSED_DIR) / "time_series_risk.png", freq='M')
         if "Animate Risk Over Time" in options:
             maps.animate_risk_over_time(df_full, years=None, output_file=cfg.risk_map_animation_output)

@@ -17,6 +17,7 @@ data_paths:
   khmao_geojson: "data/processed/khmao.geojson"
   processed_table: "data/processed/master_training_data.parquet"
   xgboost_params: "data/processed/best_xgboost_params.json"
+  lightgbm_params: "data/processed/best_lightgbm_params.json"
   risk_map_animation_output: "data/processed/animation_risk_map.gif"
 
 model_params:

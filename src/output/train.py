@@ -206,51 +206,26 @@ def generate_forecast(
     df["fire_probability"] = probs
     return df
 
-def evaluate_model(model, X_test, y_test, features):
-    probs = model.predict_proba(X_test)[:, 1]
-    precisions, recalls, thresholds = precision_recall_curve(
-        y_test,
-        probs
-    )
-    
-    f1_scores = np.divide(
-        2 * (precisions * recalls),
-        (precisions + recalls),
-        out=np.zeros_like(precisions),
-        where=(precisions + recalls) != 0
-    )
-    
-    precisions = precisions[:-1]
-    recalls = recalls[:-1]
-    
-    optimal_idx = np.argmax(f1_scores)
-    
-    optimal_threshold = thresholds[optimal_idx]
-    
-    print(f"\nOptimal Probability Threshold (Max F1): {optimal_threshold:.4f}")
-    
-    preds_optimized = (probs >= optimal_threshold).astype(int)
-    
-    K = 1000
-    top_k_indices = np.argsort(probs)[-K:]
-    
-    actual_fires_in_top_k = y_test.iloc[top_k_indices].sum()
-    precision_at_k = actual_fires_in_top_k / K
-    
-    print(f"Precision@{K}: {precision_at_k:.4f}")
-    
-    auc = roc_auc_score(y_test, probs)
-    print("ROC-AUC: ", auc)
-    print(classification_report(y_test, preds_optimized))
-    
-    importance = pd.Series(
-        model.feature_importances_,
-        index=features
-    ).sort_values(ascending=False)
-    
-    print(importance)
-    
-    return optimal_threshold
+def evaluate_model(model, X, y, features, threshold=None):
+    probs = model.predict_proba(X)[:, 1]
+    if threshold is None:
+        precisions, recalls, thresholds = precision_recall_curve(y, probs)
+        f1_scores = 2 * (precisions[:-1] * recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-12)
+        best_idx = np.argmax(f1_scores)
+        threshold = thresholds[best_idx]
+        print(f"\nOptimal Probability Threshold (Max F1): {threshold:.4f}")
+        beta = 2
+        f2_scores = (1 + beta**2) * (precisions * recalls) / (beta**2 * precisions + recalls)
+    preds = (probs >= threshold).astype(int)
+
+    print(classification_report(y, preds))
+    print(f"ROC-AUC: {roc_auc_score(y, probs):.4f}")
+
+    if hasattr(model, 'feature_importances_'):
+        importance = pd.Series(model.feature_importances_, index=features).sort_values(ascending=False)
+        print(importance)
+
+    return threshold, probs, preds, f2_scores
 
 def explain_model_with_shap(model, X_test):
     if hasattr(model, "best_estimator_"):

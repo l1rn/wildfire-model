@@ -12,13 +12,15 @@ from sklearn.metrics import (
     classification_report, 
     precision_score,
     f1_score,
-    recall_score
+    recall_score,
+    accuracy_score
 )
 
 from sklearn.model_selection import RandomizedSearchCV, PredefinedSplit
 from imblearn.over_sampling import SMOTE
 from imblearn.combine import SMOTEENN
 from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
 import numpy as np
 
 cfg = Config()
@@ -90,49 +92,102 @@ class WildfirePipeline:
             self.features = [f for f in all_candidates if f in {"dist_oil_gas", "pop_density", "ghm"}]
         else: 
             self.features = all_candidates
-    def tuning(self, scale_pos_weight, X_train, X_val, y_train, y_val):
-        base_model = XGBClassifier(scale_pos_weight=scale_pos_weight, 
+    def tuning(self, scale_pos_weight, X_train, X_val, y_train, y_val, model):
+        if model == "xgb":
+            base_model = XGBClassifier(scale_pos_weight=scale_pos_weight, 
                                         random_state=42, eval_metrics='logloss')
                 
-        param_grid = {
-            'n_estimators': [100, 300, 500],
-            'max_depth': [3, 5, 7, 10],
-            'learning_rate': [0.01, 0.05, 0.1],
-            'subsample': [0.6, 0.8, 1.0],
-            'colsample_bytree': [0.6, 0.8, 1.0],
-            'min_child_weight': [1, 3, 5],
-            'reg_lambda': [0.1, 1, 10],
-            'reg_alpha': [0, 0.1, 1],
-        }
+            param_grid = {
+                'n_estimators': [100, 300, 500],
+                'max_depth': [3, 5, 7, 10],
+                'learning_rate': [0.01, 0.05, 0.1],
+                'subsample': [0.6, 0.8, 1.0],
+                'colsample_bytree': [0.6, 0.8, 1.0],
+                'min_child_weight': [1, 3, 5],
+                'reg_lambda': [0.1, 1, 10],
+                'reg_alpha': [0, 0.1, 1],
+            }
+            
+            X_combined =  pd.concat([X_train, X_val])
+            y_combined = pd.concat([y_train, y_val])
+            test_fold = np.array([-1]*len(X_train) + [0]*len(X_val))
+            ps = PredefinedSplit(test_fold)
+            
+            random_search = RandomizedSearchCV (
+                estimator=base_model,
+                param_distributions=param_grid,
+                cv = ps, 
+                scoring='average_precision',
+                n_jobs=-1,
+                verbose=1,
+                random_state=cfg.RANDOM_SEED
+            )
+            
+            random_search.fit(X_combined, y_combined)
+            print("Best parameters:", random_search.best_params_)
+            best_params = random_search.best_params_                
+            import json
+            with open(cfg.xgboost_params, 'w') as f:
+                json.dump(best_params, f)
+            
+            self.model = XGBClassifier(
+                **best_params,
+                scale_pos_weight=scale_pos_weight,
+                random_state=42,
+                eval_metric='logloss'
+            )
+        elif model == "lgbm":
+            base_model = LGBMClassifier(
+                scale_pos_weight=scale_pos_weight,
+                random_state=42,
+                verbosity=-1
+            )
+            
+            param_grid = {
+                'n_estimators': [100, 300, 500],
+                'learning_rate': [0.01, 0.05, 0.1],
+                'num_leaves': [31, 50, 100],
+                'subsample': [0.6, 0.8, 1.0],
+                'colsample_bytree': [0.6, 0.8, 1.0],
+                'min_child_weight': [1, 3, 5],
+                'reg_lambda': [0.1, 1, 10],
+                'reg_alpha': [0, 0.1, 1],
+            }
+            
+            X_combined =  pd.concat([X_train, X_val])
+            y_combined = pd.concat([y_train, y_val])
+            test_fold = np.array([-1]*len(X_train) + [0]*len(X_val))
+            ps = PredefinedSplit(test_fold)
+            
+            random_search = RandomizedSearchCV (
+                estimator=base_model,
+                param_distributions=param_grid,
+                cv = ps, 
+                scoring='average_precision',
+                n_jobs=-1,
+                verbose=1,
+                random_state=cfg.RANDOM_SEED
+            )
+            random_search.fit(X_combined, y_combined)
+            best_params = random_search.best_params_
+            print("Best LightGBM params:", best_params)
+            import json
+            with open(cfg.lightgbm_params, 'w') as f:
+                json.dump(best_params, f)
+            
+            self.model = XGBClassifier(
+                **best_params,
+                scale_pos_weight=scale_pos_weight,
+                random_state=42,
+                eval_metric='logloss'
+            )
         
-        X_combined =  pd.concat([X_train, X_val])
-        y_combined = pd.concat([y_train, y_val])
-        test_fold = np.array([-1]*len(X_train) + [0]*len(X_val))
-        ps = PredefinedSplit(test_fold)
-        
-        random_search = RandomizedSearchCV (
-            estimator=base_model,
-            param_distributions=param_grid,
-            cv = ps, 
-            scoring='average_precision',
-            n_jobs=-1,
-            verbose=1,
-            random_state=cfg.RANDOM_SEED
-        )
-        
-        random_search.fit(X_combined, y_combined)
-        print("Best parameters:", random_search.best_params_)
-        best_params = random_search.best_params_                
-        import json
-        with open(cfg.xgboost_params, 'w') as f:
-            json.dump(best_params, f)
-        
-        self.model = XGBClassifier(
-            **best_params,
-            scale_pos_weight=scale_pos_weight,
-            random_state=42,
-            eval_metric='logloss'
-        )
+    def find_optimal_threshold(self, model, X_val, y_val):
+        probs = model.predict_proba(X_val)[:, 1]
+        precisions, recalls, thresholds = precision_recall_curve(y_val, probs)
+        f1_scores = 2 * (precisions[:-1] * recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-12)
+        best_idx = np.argmax(f1_scores)
+        return thresholds[best_idx]
     
     def train(self, df):
         train, val, test  = split.temporal_split(df)       
@@ -160,13 +215,22 @@ class WildfirePipeline:
         y_val = val["fire"]
         if "xgboost" in self.model_factory.__name__:
             if self.tune:
-                self.tuning(scale_pos_weight, X_train, X_val, y_train, y_val)
+                self.tuning(scale_pos_weight, X_train, X_val, y_train, y_val, "xgb")
             else:
                 model_params = self.params.copy()
                 model_params['scale_pos_weight'] = scale_pos_weight
                 model_params['random_state'] = 42
                 model_params['eval_metric'] = 'logloss'
                 self.model = XGBClassifier(**model_params)
+        elif "lightgbm" in self.model_factory.__name__:
+            if self.tune:
+                self.tuning(scale_pos_weight, X_train, X_val, y_train, y_val, "lgbm")
+            else:
+                model_params = self.params.copy()
+                model_params['scale_pos_weight'] = scale_pos_weight
+                model_params['random_state'] = 42
+                model_params['verbosity'] = -1
+                self.model = LGBMClassifier(**model_params)
         else:
             self.model = self.model_factory()
         class CalibratedXGB:
@@ -177,6 +241,7 @@ class WildfirePipeline:
 
             def predict_proba(self, X):
                 return self.calibrator.predict_proba(X)
+            
         self.base_model = self.model
         from sklearn.calibration import CalibratedClassifierCV
         
@@ -193,11 +258,13 @@ class WildfirePipeline:
         X_test = test[self.features]
         y_test = test['fire']
 
-        optimal_threshold = tr.evaluate_model(self.model, X_test, y_test, self.features)
-        test_probs = self.model.predict_proba(X_test)[:, 1]
-        test_preds = (test_probs >= optimal_threshold).astype(int)        
+        optimal_threshold, test_probs, test_preds, f2 = tr.evaluate_model(self.model, X_test, y_test, self.features)
+        K = 1000
+        top_k_indices = np.argsort(test_probs)[-K:]
         
-        self._evaluate_by_year_type(test, test_probs, optimal_threshold)
+        actual_fires_in_top_k = y_test.iloc[top_k_indices].sum()
+        precision_at_k = actual_fires_in_top_k / K
+        # self._evaluate_by_year_type(test, test_probs, optimal_threshold)
         tr.generate_evaluation_artifacts(
             model=self.model,
             X_train=X_train,
@@ -216,8 +283,11 @@ class WildfirePipeline:
             "precision": precision_score(y_test, test_preds),
             "recall": recall_score(y_test, test_preds),
             "f1": f1_score(y_test, test_preds),
+            f"p@{K}": precision_at_k,            
             "roc_auc": roc_auc_score(y_test, test_probs),
-            "threshold": optimal_threshold
+            "threshold": optimal_threshold,
+            "accuracy": accuracy_score(y_test, test_preds),
+            "f2": f2,
         }
         return self.model, test_full, optimal_threshold
     

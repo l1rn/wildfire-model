@@ -1,4 +1,5 @@
-from xgboost import XGBClassifier 
+from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import RandomizedSearchCV
 from scipy.stats import randint
@@ -63,6 +64,9 @@ def optimize_xgboost(
     print(f"[+] Best Parameters: {search.best_params_}")
     
     return search.best_estimator_
+
+def lightgbm_factory():
+    return LGBMClassifier(random_state=42, verbosity=-1)
 
 def get_random_forest_search():
     model = RandomForestClassifier(

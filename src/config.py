@@ -25,6 +25,7 @@ class Config:
         
         self.khmao_geojson = data["data_paths"]["khmao_geojson"]
         self.xgboost_params = data["data_paths"]["xgboost_params"]
+        self.lightgbm_params = data["data_paths"]["lightgbm_params"]
         self.risk_map_animation_output = data["data_paths"]["risk_map_animation_output"]
 
         self.config_file = data

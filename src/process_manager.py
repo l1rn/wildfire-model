@@ -88,7 +88,9 @@ def summarize_cv():
 def wildfire_pipeline():
     model_name, factory = menu.choose_model()
     use_lag = int(input("Use lag features(yes - 1 / no - 0): "))
-    groups = ["all"]
+    groups = ["all", 
+            #   "natural", "anthropogenic", "compounding"
+              ]
     results = {}
     for group in groups:
         if cfg.production_mode:

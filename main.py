@@ -1,5 +1,4 @@
 from src import process_manager
-from src.visualization import maps
 import sys
 
 def main():

@@ -176,6 +176,7 @@ def process_data():
     
     dataset_dict = {
         "temp": t2m,
+        "dew": align(d2m, t2m),
         "vpd": align(vpd, t2m),
         "precip": align(tp, t2m),
         "sm1": align(sm1, t2m),

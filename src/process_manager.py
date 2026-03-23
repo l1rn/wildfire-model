@@ -88,7 +88,7 @@ def summarize_cv():
 def wildfire_pipeline():
     model_name, factory = menu.choose_model()
     use_lag = int(input("Use lag features(yes - 1 / no - 0): "))
-    groups = ["all", "natural", "anthropogenic", "compounding"]
+    groups = ["all"]
     results = {}
     for group in groups:
         if cfg.production_mode:
@@ -119,6 +119,7 @@ def wildfire_pipeline():
         results[group] = pipeline.get_metrics()
     
     df_table = pd.DataFrame(results).T
+    
     print(df_table)
 
 def temperature_pipeline():

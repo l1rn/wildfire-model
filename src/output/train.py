@@ -220,12 +220,12 @@ def evaluate_model(model, X_test, y_test, features):
         where=(precisions + recalls) != 0
     )
     
+    precisions = precisions[:-1]
+    recalls = recalls[:-1]
+    
     optimal_idx = np.argmax(f1_scores)
     
-    if optimal_idx < len(thresholds):
-        optimal_threshold = thresholds[optimal_idx]
-    else:
-        optimal_threshold = 0.5
+    optimal_threshold = thresholds[optimal_idx]
     
     print(f"\nOptimal Probability Threshold (Max F1): {optimal_threshold:.4f}")
     
@@ -307,3 +307,27 @@ def plot_calibration_curve(
     plt.savefig(output_file, dpi=300)
     plt.close()
     print(f"Calibration plot saved to {output_file}")
+    
+def plot_threshold_analysis(y_true, y_proba, output_file='threshold_analysis.png'):
+    precisions, recalls, thresholds = precision_recall_curve(y_true, y_proba)
+    f1_scores = 2 * (precisions[:-1]) * (recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-12)
+    
+    best_idx = np.argmax(f1_scores)
+    best_thresh = thresholds[best_idx]
+    
+    fig, ax = plt.subplots(figsize=(8,6))
+    ax.plot(thresholds, precisions[:-1], label='Precision', linewidth=2)
+    ax.plot(thresholds, recalls[:-1], label='Recall', linewidth=2)
+    ax.plot(thresholds, f1_scores, label='F1', linewidth=2)
+    
+    ax.axvline(best_thresh, color='red', linestyle=':', label=f'Optimal threshold = {best_thresh:.4f}')
+    
+    ax.set_xlabel('Probability threshold')
+    ax.set_ylabel('Score')
+    ax.legend()
+    ax.set_title('Precision, Recall, and F1 vs. Decision Threshold')
+    plt.tight_layout()
+    plt.savefig(output_file, dpi=300)
+    plt.close()
+    print(f"Threshold analysis plot saved to {output_file}")
+    

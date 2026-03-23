@@ -17,6 +17,7 @@ from sklearn.metrics import (
 
 from sklearn.model_selection import RandomizedSearchCV, PredefinedSplit
 from imblearn.over_sampling import SMOTE
+from imblearn.combine import SMOTEENN
 from xgboost import XGBClassifier
 import numpy as np
 
@@ -65,8 +66,11 @@ class WildfirePipeline:
         engineered = [
             "month_sin", "month_cos",
             "vpd_ghm_interaction",       
-            "ghm_windspeed_interaction",
-            "temp_precip_interaction" 
+            # "ghm_windspeed_interaction",
+            "temp_ghm_interaction",
+            "vpd_3m_avg_ghm_interaction",
+            # "vpd_3m_avg",
+            # "vpd_infrastructure_interaction"
         ]
 
         anthropogenic = [
@@ -86,7 +90,50 @@ class WildfirePipeline:
             self.features = [f for f in all_candidates if f in {"dist_oil_gas", "pop_density", "ghm"}]
         else: 
             self.features = all_candidates
+    def tuning(self, scale_pos_weight, X_train, X_val, y_train, y_val):
+        base_model = XGBClassifier(scale_pos_weight=scale_pos_weight, 
+                                        random_state=42, eval_metrics='logloss')
+                
+        param_grid = {
+            'n_estimators': [100, 300, 500],
+            'max_depth': [3, 5, 7, 10],
+            'learning_rate': [0.01, 0.05, 0.1],
+            'subsample': [0.6, 0.8, 1.0],
+            'colsample_bytree': [0.6, 0.8, 1.0],
+            'min_child_weight': [1, 3, 5],
+            'reg_lambda': [0.1, 1, 10],
+            'reg_alpha': [0, 0.1, 1],
+        }
         
+        X_combined =  pd.concat([X_train, X_val])
+        y_combined = pd.concat([y_train, y_val])
+        test_fold = np.array([-1]*len(X_train) + [0]*len(X_val))
+        ps = PredefinedSplit(test_fold)
+        
+        random_search = RandomizedSearchCV (
+            estimator=base_model,
+            param_distributions=param_grid,
+            cv = ps, 
+            scoring='average_precision',
+            n_jobs=-1,
+            verbose=1,
+            random_state=cfg.RANDOM_SEED
+        )
+        
+        random_search.fit(X_combined, y_combined)
+        print("Best parameters:", random_search.best_params_)
+        best_params = random_search.best_params_                
+        import json
+        with open(cfg.xgboost_params, 'w') as f:
+            json.dump(best_params, f)
+        
+        self.model = XGBClassifier(
+            **best_params,
+            scale_pos_weight=scale_pos_weight,
+            random_state=42,
+            eval_metric='logloss'
+        )
+    
     def train(self, df):
         train, val, test  = split.temporal_split(df)       
         
@@ -104,7 +151,7 @@ class WildfirePipeline:
         y_train = train_balanced['fire']
         
         if self.use_smote:
-            smote = SMOTE(sampling_strategy=self.smote_ratio, random_state=42)
+            smote = SMOTEENN(sampling_strategy=self.smote_ratio, random_state=42)
             X_train, y_train = smote.fit_resample(X_train, y_train)
             
         scale_pos_weight = min(50, (y_train == 0).sum() / (y_train == 1).sum())
@@ -113,45 +160,7 @@ class WildfirePipeline:
         y_val = val["fire"]
         if "xgboost" in self.model_factory.__name__:
             if self.tune:
-                base_model = XGBClassifier(scale_pos_weight=scale_pos_weight, 
-                                        random_state=42, eval_metrics='logloss')
-                
-                param_grid = {
-                    'n_estimators': [100, 200],
-                    'max_depth': [3, 5, 7],
-                    'learning_rate': [0.01, 0.05, 0.1],
-                    'subsample': [0.6, 0.8, 1.0],
-                    'colsample_bytree': [0.6, 0.8, 1.0],
-                }
-                
-                X_combined =  pd.concat([X_train, X_val])
-                y_combined = pd.concat([y_train, y_val])
-                test_fold = np.array([-1]*len(X_train) + [0]*len(X_val))
-                ps = PredefinedSplit(test_fold)
-                
-                random_search = RandomizedSearchCV (
-                    estimator=base_model,
-                    param_distributions=param_grid,
-                    cv = ps, 
-                    scoring='average_precision',
-                    n_jobs=-1,
-                    verbose=1,
-                    random_state=cfg.RANDOM_SEED
-                )
-                
-                random_search.fit(X_combined, y_combined)
-                print("Best parameters:", random_search.best_params_)
-                best_params = random_search.best_params_                
-                import json
-                with open(cfg.xgboost_params, 'w') as f:
-                    json.dump(best_params, f)
-                
-                self.model = XGBClassifier(
-                    **best_params,
-                    scale_pos_weight=scale_pos_weight,
-                    random_state=42,
-                    eval_metric='logloss'
-                )
+                self.tuning(scale_pos_weight, X_train, X_val, y_train, y_val)
             else:
                 model_params = self.params.copy()
                 model_params['scale_pos_weight'] = scale_pos_weight
@@ -288,7 +297,9 @@ class WildfirePipeline:
                 "Create Bivarite Map GHM & VPD",
                 "Animate Risk Over Time",
                 "Calibration Plot",
-                "Time Series of Predicted vs. Observed Fire Counts"
+                "Time Series of Predicted vs. Observed Fire Counts",
+                "Map of Top Driver",
+                "Threshold Performance Plot"
             ]
         ).ask()
         
@@ -318,3 +329,8 @@ class WildfirePipeline:
             maps.plot_time_series_risk(df_full, output_file=Path(PROCESSED_DIR) / "time_series_risk.png", freq='M')
         if "Animate Risk Over Time" in options:
             maps.animate_risk_over_time(df_full, years=None, output_file=cfg.risk_map_animation_output)
+        if "Map of Top Driver" in options:
+            maps.map_to_driver(df_full, output_file=Path(PROCESSED_DIR) / "top_driver_map.png")
+        if "Threshold Performance Plot" in options:
+            test_probs = model.predict_proba(test[self.features])[:, 1]
+            tr.plot_threshold_analysis(test['fire'], test_probs, output_file=Path(PROCESSED_DIR) / "threshold_analysis.png")

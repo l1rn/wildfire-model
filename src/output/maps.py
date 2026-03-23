@@ -396,3 +396,39 @@ def plot_time_series_risk(
     plt.savefig(output_file, dpi=300)
     plt.close()
     print(f'Time Series plot saved to {output_file}')
+    
+def map_to_driver(df, driver='vpd_ghm_interaction', year=2022, month=7, output_file='top_driver_map.png'):
+    subset = df[(df['valid_time'].dt.year==year) & (df['valid_time'].dt.month==month)].copy()
+    
+    if subset.empty:
+        print(f"No data for {year} - {month}")
+        subset = df.copy()
+        
+    fig, ax = plt.subplots(figsize=(14, 8))
+    sc = ax.scatter(subset['x'], subset['y'], c=subset[driver], cmap='plasma',
+                    s=15, alpha=0.6, edgecolors='none', vmin=subset[driver].quantile(0.05),
+                    vmax=subset[driver].quantile(0.95))
+    
+    cbar = plt.colorbar(sc, ax=ax)
+    cbar.set_label(driver)
+    
+    fires = subset[subset['fire'] == 1]
+    ax.scatter(fires['x'], fires['y'], marker='x', s=80, color='red',
+               linewidths=2, label='Observed fires')
+    
+    ax.set_title(f"Spatial distribution of {driver}\n({year}-{month} and observed fires.)")
+    ax.set_xlabel('Longitude')
+    ax.set_ylabel('Latitude')
+    ax.legend(loc='upper right')
+
+    ax.grid(True, alpha=0.3)
+    
+    if hasattr(cfg, 'khmao_geojson') and cfg.khmao_geojson:
+        boundary = gpd.read_file(cfg.khmao_geojson)
+        ax.set_xlim(boundary.total_bounds[0], boundary.total_bounds[2])
+        ax.set_ylim(boundary.total_bounds[1], boundary.total_bounds[3])
+        
+    plt.tight_layout()
+    plt.savefig(output_file, dpi=300)
+    plt.close()
+    print(f"Top driver saved to {output_file}")

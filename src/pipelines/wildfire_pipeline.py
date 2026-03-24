@@ -13,7 +13,8 @@ from sklearn.metrics import (
     precision_score,
     f1_score,
     recall_score,
-    accuracy_score
+    accuracy_score,
+    fbeta_score
 )
 
 from sklearn.model_selection import RandomizedSearchCV, PredefinedSplit
@@ -68,11 +69,9 @@ class WildfirePipeline:
         engineered = [
             "month_sin", "month_cos",
             "vpd_ghm_interaction",       
-            # "ghm_windspeed_interaction",
             "temp_ghm_interaction",
-            "vpd_3m_avg_ghm_interaction",
+            "temp_precip_interaction",
             # "vpd_3m_avg",
-            # "vpd_infrastructure_interaction"
         ]
 
         anthropogenic = [
@@ -258,7 +257,7 @@ class WildfirePipeline:
         X_test = test[self.features]
         y_test = test['fire']
 
-        optimal_threshold, test_probs, test_preds, f2 = tr.evaluate_model(self.model, X_test, y_test, self.features)
+        optimal_threshold, test_probs, test_preds = tr.evaluate_model(self.model, X_test, y_test, self.features)
         K = 1000
         top_k_indices = np.argsort(test_probs)[-K:]
         
@@ -287,7 +286,7 @@ class WildfirePipeline:
             "roc_auc": roc_auc_score(y_test, test_probs),
             "threshold": optimal_threshold,
             "accuracy": accuracy_score(y_test, test_preds),
-            "f2": f2,
+            "f2": fbeta_score(y_test, test_preds, beta=2),
         }
         return self.model, test_full, optimal_threshold
     
@@ -359,6 +358,7 @@ class WildfirePipeline:
         options = questionary.checkbox(
             "Select options:",
             choices=[
+                "Feature Importance from the model",
                 "SHAP Explanation Bar & Summary",
                 "Visualize Risk-map",
                 "Generate Partial Dependence Plots (PDP)",
@@ -373,6 +373,13 @@ class WildfirePipeline:
             ]
         ).ask()
         
+        if "Feature Importance from the model" in options:
+            maps.plot_feature_importance(
+                model.base_model, 
+                features=self.features, 
+                top_n=15, 
+                output_file=Path(PROCESSED_DIR) / "feature_importance.png" 
+            )
         if "Visualize Risk-map" in options:
             self.visualize(model.base_model, df_full)
         if "SHAP Explanation Bar & Summary" in options:

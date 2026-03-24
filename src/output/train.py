@@ -214,8 +214,6 @@ def evaluate_model(model, X, y, features, threshold=None):
         best_idx = np.argmax(f1_scores)
         threshold = thresholds[best_idx]
         print(f"\nOptimal Probability Threshold (Max F1): {threshold:.4f}")
-        beta = 2
-        f2_scores = (1 + beta**2) * (precisions * recalls) / (beta**2 * precisions + recalls)
     preds = (probs >= threshold).astype(int)
 
     print(classification_report(y, preds))
@@ -225,7 +223,7 @@ def evaluate_model(model, X, y, features, threshold=None):
         importance = pd.Series(model.feature_importances_, index=features).sort_values(ascending=False)
         print(importance)
 
-    return threshold, probs, preds, f2_scores
+    return threshold, probs, preds
 
 def explain_model_with_shap(model, X_test):
     if hasattr(model, "best_estimator_"):

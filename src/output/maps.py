@@ -432,3 +432,20 @@ def map_to_driver(df, driver='vpd_ghm_interaction', year=2022, month=7, output_f
     plt.savefig(output_file, dpi=300)
     plt.close()
     print(f"Top driver saved to {output_file}")
+    
+def plot_feature_importance(model, features, top_n=None, output_file="feature_importance.png"):
+    importances = model.feature_importances_
+    feat_imp = pd.Series(importances, index=features).sort_values(ascending=False)
+    
+    if top_n is not None:
+        feat_imp = feat_imp.head(top_n)
+    
+    fig, ax = plt.subplots(figsize=(10, max(6, len(feat_imp) * 0.3)))
+    feat_imp.plot(kind='barh', ax=ax, color='steelblue')
+    ax.set_xlabel('Feature importance (gain)')
+    ax.set_title('Model Feature Importance')
+    ax.invert_yaxis()
+    plt.tight_layout()
+    plt.savefig(output_file, dpi=300)
+    plt.close()
+    print(f"Feature importance plot saved to {output_file}")

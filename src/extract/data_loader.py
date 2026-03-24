@@ -66,7 +66,6 @@ def create_new_features(df: pd.DataFrame):
     df["month"] = df["valid_time"].dt.month
     df["month_sin"] = np.sin(2 * np.pi * df['month'] / 12)
     df["month_cos"] = np.cos(2 * np.pi * df['month'] / 12)
-    df["ghm_windspeed_interaction"] = df["ghm"] * df["wind_speed"]
     df["vpd_infrastructure_interaction"] = df["vpd"] * df["dist_oil_gas"]
     df["vpd_pop_density_interaction"] = df["vpd"] * df["pop_density"]
     df["vpd_3m_avg"] = (
@@ -75,9 +74,11 @@ def create_new_features(df: pd.DataFrame):
         .mean()
         .reset_index(level=[0,1], drop=True)
     )
-    df["vpd_3m_avg_ghm_interaction"] = df["vpd"] * df["ghm"]
+    df["vpd_3m_avg_ghm_interaction"] = df["vpd_3m_avg"] * df["ghm"]
+    df["vpd_3m_avg_infrastructure_interaction"] = df["vpd_3m_avg"] * df["dist_oil_gas"]
     df["temp_ghm_interaction"] = df["temp"] * df["ghm"]
-    df["temp_infrasturture_interaction"] = df["temp"] * df["dist_oil_gas"]
+    df["temp_infrastructure_interaction"] = df["temp"] * df["dist_oil_gas"]
+    df["temp_precip_interaction"] = df["temp"] * df["precip"]
     df["dew_ghm_interaction"] = df["dew"] * df["ghm"]
     df["dew_infrastructure_interaction"] = df["dew"] * df["dist_oil_gas"]
     return df

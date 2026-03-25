@@ -11,8 +11,6 @@ def temporal_split(
     val_size: float = 0.15
 ):
     df = df.sort_values('valid_time')
-    extreme_years = sorted(df[df['is_extreme_year'] == 1]['year'].unique())
-    normal_years = sorted(df[df['is_extreme_year'] == 0]['year'].unique())
     
     val_idx = int(len(df) * (1  - test_size - val_size))
     test_idx = int(len(df) * (1 - test_size))

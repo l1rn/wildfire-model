@@ -14,6 +14,9 @@ data_paths:
   raw_peatland: "data/raw/khmao_peatland.tif"
   raw_oil_gas: "data/raw/khmao_oil_gas.tif"
 
+  full_era5: "data/raw/khmao_era5_full.nc"
+  full_firms: "data/raw/khmao_fire_archive_full.csv"
+
   khmao_geojson: "data/processed/khmao.geojson"
   processed_table: "data/processed/master_training_data.parquet"
   xgboost_params: "data/processed/best_xgboost_params.json"

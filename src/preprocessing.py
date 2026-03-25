@@ -213,14 +213,5 @@ def upload_dataset_to_parquet(
     ds["valid_time"] = pd.to_datetime(ds["valid_time"])
     ds["year"] = ds["valid_time"].dt.year
     
-    study_years = cfg.get_study_years()
-    target_years = study_years['anomalous_hot'] + study_years['baseline_cold']
-    
-    ds_filtered = ds[ds["year"].isin(target_years)]
-    
-    ds_filtered['is_extreme_year'] = ds_filtered['year'].apply(
-        lambda y: 1 if y in study_years['anomalous_hot'] else 0
-    )
-    
-    ds_filtered.to_parquet(cfg.processed_table, index=True)
+    ds.to_parquet(cfg.processed_table, index=True)
     

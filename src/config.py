@@ -12,6 +12,9 @@ class Config:
     def __init__(self, path="config.yaml"):
         with open(path, "r") as f:
             data = yaml.safe_load(f)
+            
+        self.full_weather = data["data_paths"]["full_era5"]
+        self.full_firms = data["data_paths"]["full_firms"]
         
         self.raw_weather = data["data_paths"]["raw_weather"]
         self.raw_dem = data["data_paths"]["raw_dem"]

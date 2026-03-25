@@ -40,8 +40,9 @@ class GeeExtractor:
             .rename(['elevation', 'slope']) \
             .float()
         
-        ghm = ee.Image("CSP/HM/GlobalHumanModification/2016") \
-            .select('gHM').clip(self.bbox)
+        ghm = ee.ImageCollection("projects/sat-io/open-datasets/GHM/HM_1990_2020_OVERALL_300M") \
+            .filter(ee.Filter.eq('year', 2020)) \
+            .first().clip(self.bbox)
             
         ogim = ee.FeatureCollection("EDF/OGIM/current") \
             .filterBounds(self.bbox)
@@ -63,7 +64,7 @@ class GeeExtractor:
             .sort('system:time_start', False) \
             .first().rename("pop_density").clip(self.bbox)
         
-        years = range(2016, 2027) # Строго до 2027, чтобы включить 2026
+        years = range(2016, 2027) 
         
         yearly_bands = []
         

@@ -129,7 +129,6 @@ def process_data():
     
     vpd = calculate_vpd(t2m, d2m)
 
-
     t2m, d2m, tp, vpd, \
     sm1, wind_speed = unify_xy(
         t2m, d2m, tp, vpd, sm1, wind_speed

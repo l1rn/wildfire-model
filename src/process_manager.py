@@ -9,6 +9,7 @@ from src.config import Config
 import pandas as pd
 
 import src.preprocessing as preprocessing
+import src.output.data_analysis as da
 from src.output.maps import plot_historical_fires, plot_landcover_map
 
 collection = GeeExtractor()
@@ -124,6 +125,10 @@ def wildfire_pipeline():
     
     print(df_table)
 
+def eda_execution():
+    df = data_loader.load_master_dataset()
+    da.execute_eda_pipeline(df)
+
 def temperature_pipeline():
     pipeline = TemperaturePipeline()
     pipeline.run()
@@ -170,7 +175,7 @@ options = {
 },
 2: {
     1: process_and_upload,
-    2: plot_data
+    2: plot_data,
 },
 3: {
     1: execute_modis_pipeline,
@@ -179,7 +184,9 @@ options = {
 4: {
     1: summarize_cv,
     2: wildfire_pipeline,
-    3: temperature_pipeline
+    3: temperature_pipeline,
+    4: eda_execution
+    
 }}
     
 def choose_option():

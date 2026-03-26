@@ -20,7 +20,7 @@ class GeeExtractor:
     def run_gee_pipeline(self):
         lc = ee.Image("ESA/WorldCover/v200/2021").clip(self.bbox).uint8()
 
-        dem_col = ee.ImageCollection("COPERNICUS/DEM/GLO30") \
+        dem_col = ee.ImageCollection("projects/sat-io/open-datasets/GLO-30") \
             .filterBounds(self.bbox) \
            
         native_proj = dem_col \

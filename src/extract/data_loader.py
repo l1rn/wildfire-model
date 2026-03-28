@@ -3,6 +3,8 @@ import rioxarray
 import pandas as pd
 import geopandas as gpd
 import numpy as np
+from shapely.geometry import Point
+
 from src.config import Config
 
 from typing import Optional
@@ -34,7 +36,6 @@ def load_static_raster(path: str) -> Optional[xr.DataArray]:
         return None
         
 def load_firms(path: str) -> Optional[gpd.GeoDataFrame]:
-    """Loads FIRMS CSV and converts to a GeoDataFrame"""
     try:
         df = pd.read_csv(path)
         df["acq_date"] = pd.to_datetime(df["acq_date"])
@@ -56,10 +57,25 @@ def load_master_dataset():
     df["valid_time"] = pd.to_datetime(df["valid_time"])
     df['month'] = df['valid_time'].dt.month
     
+    df = df[df['year'].isin(range(2012, 2024))]
     df = df[df['month'].isin(cfg.WILDFIRE_SEASON_MONTHS)]
     
     df = df[~df['landcover'].isin(cfg.NON_BURNABLE_CLASSES_LC)]
     return df
+
+def load_russian_fires(filepath: str, use_start_date: bool = True):
+    df = pd.read_parquet(filepath)  
+    df['date_beginning'] = pd.to_datetime(df['date_beginning'])
+    df['acq_date'] = df['date_beginning']
+    df['type'] = df['type'].map({'Лесные': 0, 'Нелесные': 2})
+    
+    geometry = [Point(xy) for xy in zip(df['longitude'], df['latitude'])]
+    gdf = gpd.GeoDataFrame(df, geometry=geometry, crs='EPSG:4326')
+    
+    cols = ['geometry', 'acq_date', 'type']
+    if 'area_total' in df.columns:
+        cols.append('area_total')
+    return gdf[cols].copy()
 
 def create_new_features(df: pd.DataFrame):
     df["vpd_ghm_interaction"] = df["vpd"] * df["ghm"]

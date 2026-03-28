@@ -36,7 +36,7 @@ def show_master_table():
     
 def show_fire_archive_head():
     print("Showing fire archive head...")
-    firms = data_loader.load_firms(cfg.raw_firms)
+    firms = data_loader.load_firms(cfg.raw_fire_data)
     print(firms.head())
     
 def show_ghm_info():
@@ -104,10 +104,8 @@ def wildfire_pipeline():
                 use_lag=use_lag, 
                 tune=False, 
                 params=best_params,
-                use_smote=True,
-                downsample_ratio=3,
-                smote_ratio=0.5,
                 feature_group=group,
+                use_smote=True,
             )
         else:
             pipeline = WildfirePipeline(
@@ -137,7 +135,7 @@ def plot_data():
     options = {
         1: ("plot for historical fires",
             lambda: plot_historical_fires(
-            cfg.raw_firms,
+            cfg.raw_fire_data,
             cfg.khmao_geojson,
             2022,
             7
@@ -186,7 +184,6 @@ options = {
     2: wildfire_pipeline,
     3: temperature_pipeline,
     4: eda_execution
-    
 }}
     
 def choose_option():

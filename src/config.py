@@ -21,7 +21,7 @@ class Config:
         self.raw_dem = data["data_paths"]["raw_dem"]
         self.raw_landcover = data["data_paths"]["raw_landcover"]
         self.raw_pop_density = data["data_paths"]["raw_pop_density"]
-        self.raw_firms = data["data_paths"]["raw_firms"]
+        self.raw_fire_data = data["data_paths"]["raw_fire_data"]
         self.raw_human_mod = data["data_paths"]["raw_ghm"]
         self.raw_peatland = data["data_paths"]["raw_peatland"]
         self.raw_oil_gas = data["data_paths"]["raw_oil_gas"]

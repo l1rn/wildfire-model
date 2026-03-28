@@ -49,7 +49,7 @@ class WildfirePipeline:
         df = df.loc[:, ~df.columns.str.contains("^index|level_0")]
         data_loader.validate_dataset(df)
         return data_loader.prepare_features(df)
-    
+
     def build_features(self):
         base = [
             "dem", "landcover", "slope", "sm1", 
@@ -91,6 +91,7 @@ class WildfirePipeline:
             self.features = [f for f in all_candidates if f in {"dist_oil_gas", "pop_density", "ghm"}]
         else: 
             self.features = all_candidates
+            
     def tuning(self, scale_pos_weight, X_train, X_val, y_train, y_val, model):
         if model == "xgb":
             base_model = XGBClassifier(scale_pos_weight=scale_pos_weight, 
@@ -208,7 +209,7 @@ class WildfirePipeline:
             smote = SMOTEENN(sampling_strategy=self.smote_ratio, random_state=42)
             X_train, y_train = smote.fit_resample(X_train, y_train)
             
-        scale_pos_weight = min(50, (y_train == 0).sum() / (y_train == 1).sum())
+        scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
         
         X_val = val[self.features]
         y_val = val["fire"]

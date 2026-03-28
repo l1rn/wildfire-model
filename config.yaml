@@ -9,7 +9,7 @@ data_paths:
   raw_dem: "data/raw/khmao_terrain_1km.tif"
   raw_landcover: "data/raw/khmao_lc_1km.tif"
   raw_pop_density: "data/raw/khmao_pop.tif"
-  raw_firms: "data/raw/khmao_fire_archive.csv"
+  raw_fire_data: "data/raw/khmao_real_fires.parquet"
   raw_ghm: "data/raw/khmao_human_mod_1km.tif"
   raw_peatland: "data/raw/khmao_peatland.tif"
   raw_oil_gas: "data/raw/khmao_oil_gas.tif"

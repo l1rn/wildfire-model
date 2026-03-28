@@ -7,8 +7,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 
 def temporal_split(
     df: pd.DataFrame,
-    test_size: float = 0.15,
-    val_size: float = 0.15
+    test_size: float = 0.1,
+    val_size: float = 0.2
 ):
     df = df.sort_values('valid_time')
     
@@ -19,10 +19,6 @@ def temporal_split(
     val_years = df.iloc[val_idx:test_idx]
     test_years = df.iloc[test_idx:]
 
-    train = df[df['year'].isin(train_years)]
-    val = df[df['year'].isin(val_years)]
-    test = df[df['year'].isin(test_years)]
-    
     logger.info(train_years['year'].unique())
     
     logger.info(test_years['year'].unique())

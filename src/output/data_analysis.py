@@ -5,9 +5,11 @@ from pathlib import Path
 
 
 def execute_eda_pipeline(df):
+    df['temp_c'] = df['temp'] - 273.15
+    
     fire = df[df['fire'] == 1]
     no_fire = df[df['fire'] == 0]
-    cont_vars = ['temp', 'vpd', 'precip', 'sm1', 'wind_speed', 'dem', 
+    cont_vars = ['temp_c', 'vpd', 'precip', 'sm1', 'wind_speed', 'dem', 
                  'slope', 'ghm', 'dist_oil_gas', 'pop_density', 'peatland']
     n_vars = len(cont_vars)
     n_cols = 3

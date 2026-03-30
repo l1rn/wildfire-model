@@ -1,6 +1,5 @@
 from src import process_manager
 import sys
-import pandas as pd
 
 def main():
     try:

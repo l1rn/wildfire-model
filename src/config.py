@@ -1,5 +1,6 @@
 from pathlib import Path
 import yaml
+import os
 
 THIS_FILE = Path(__file__).resolve()
 
@@ -11,7 +12,10 @@ EDA_DIR = BASE_DIR / "data" / "eda"
 
 class Config:
     def __init__(self, path="config.yaml"):
-        with open(path, "r") as f:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        full_path = os.path.join(base_dir, "..", path)
+
+        with open(full_path, "r") as f:
             data = yaml.safe_load(f)
             
         self.full_weather = data["data_paths"]["full_era5"]
@@ -22,6 +26,7 @@ class Config:
         self.raw_landcover = data["data_paths"]["raw_landcover"]
         self.raw_pop_density = data["data_paths"]["raw_pop_density"]
         self.raw_fire_data = data["data_paths"]["raw_fire_data"]
+        self.raw_viirs_firms = data["data_paths"]["raw_viirs_firms"]
         self.raw_human_mod = data["data_paths"]["raw_ghm"]
         self.raw_peatland = data["data_paths"]["raw_peatland"]
         self.raw_oil_gas = data["data_paths"]["raw_oil_gas"]
@@ -34,6 +39,7 @@ class Config:
 
         self.config_file = data
         self.production_mode = data["production"]
+        
     WILDFIRE_SEASON_MONTHS = list(range(5, 10))
     NON_BURNABLE_CLASSES_LC = [50, 70, 80]
     RANDOM_SEED = 42

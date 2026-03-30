@@ -57,24 +57,28 @@ def load_master_dataset():
     df["valid_time"] = pd.to_datetime(df["valid_time"])
     df['month'] = df['valid_time'].dt.month
     
-    df = df[df['year'].isin(range(2012, 2024))]
+    df = df[df['year'].isin(range(2010, 2025))]
     df = df[df['month'].isin(cfg.WILDFIRE_SEASON_MONTHS)]
     
     df = df[~df['landcover'].isin(cfg.NON_BURNABLE_CLASSES_LC)]
     return df
 
 def load_russian_fires(filepath: str, use_start_date: bool = True):
-    df = pd.read_parquet(filepath)  
+    df = pd.read_csv(filepath, sep=';')  
     df['date_beginning'] = pd.to_datetime(df['date_beginning'])
     df['acq_date'] = df['date_beginning']
     df['type'] = df['type'].map({'Лесные': 0, 'Нелесные': 2})
     
+    cols = ['geometry', 'acq_date', 'type']
+    if 'area_beginning' in df.columns:
+        cols.append('area_beginning')
+    
+    if 'code' in df.columns:
+        df = df.sort_values('date_beginning').groupby('code').first().reset_index()
+        
     geometry = [Point(xy) for xy in zip(df['longitude'], df['latitude'])]
     gdf = gpd.GeoDataFrame(df, geometry=geometry, crs='EPSG:4326')
-    
-    cols = ['geometry', 'acq_date', 'type']
-    if 'area_total' in df.columns:
-        cols.append('area_total')
+        
     return gdf[cols].copy()
 
 def create_new_features(df: pd.DataFrame):
@@ -82,7 +86,6 @@ def create_new_features(df: pd.DataFrame):
     df["month"] = df["valid_time"].dt.month
     df["month_sin"] = np.sin(2 * np.pi * df['month'] / 12)
     df["month_cos"] = np.cos(2 * np.pi * df['month'] / 12)
-    df["vpd_infrastructure_interaction"] = df["vpd"] * df["dist_oil_gas"]
     df["vpd_pop_density_interaction"] = df["vpd"] * df["pop_density"]
     df["vpd_3m_avg"] = (
         df.groupby(['x', 'y'])['vpd']
@@ -91,21 +94,30 @@ def create_new_features(df: pd.DataFrame):
         .reset_index(level=[0,1], drop=True)
     )
     df["vpd_3m_avg_ghm_interaction"] = df["vpd_3m_avg"] * df["ghm"]
-    df["vpd_3m_avg_infrastructure_interaction"] = df["vpd_3m_avg"] * df["dist_oil_gas"]
     df["temp_ghm_interaction"] = df["temp"] * df["ghm"]
     df["temp_infrastructure_interaction"] = df["temp"] * df["dist_oil_gas"]
     df["temp_precip_interaction"] = df["temp"] * df["precip"]
     df["dew_ghm_interaction"] = df["dew"] * df["ghm"]
     df["dew_infrastructure_interaction"] = df["dew"] * df["dist_oil_gas"]
+    df['vpd_14p_max'] = (
+        df.groupby(['y', 'x'])['vpd']
+        .transform(lambda x: x.rolling(window=14, min_periods=1).max())
+    )
+    df['precip_30p_sum'] = (
+        df.groupby(['y', 'x'])['precip']
+        .transform(lambda x: x.rolling(window=30, min_periods=1).sum())
+    )
+    df['synergy_vpd_ghm'] = df['vpd_14p_max'] * df['ghm']
+    df['synergy_vpd_infrastructure'] = df['vpd_14p_max'] * (1 / (df['dist_oil_gas'] + 1))
     return df
-    
 
-def create_lag_features(df: pd.DataFrame):
-    df["vpd_lag1"] = df.groupby(["y", "x"])["vpd"].shift(1)
-    df["temp_lag1"] = df.groupby(["y", "x"])["temp"].shift(1)
-    df["precip_lag1"] = df.groupby(["y", "x"])["precip"].shift(1)
-    df["vpd_ghm_interaction_lag1"] = df["vpd_lag1"] * df["ghm"]
-    
+def create_lag_features(df: pd.DataFrame, lag_vars=['vpd','temp','precip','fire'], lags=1):
+    for var in lag_vars :
+        if var in df.columns:
+            for lag in range(1, lags+1):
+                df[f'{var}_lag{lag}'] = df.groupby(['y', 'x'])[var].shift(lag)
+    if 'vpd_lag1' in df.columns and 'fire_lag1' in df.columns:
+        df["vpd_fire_lag1_interaction"] = df["vpd_lag1"] * df["fire_lag1"]    
     return df
 
 def prepare_features(df: pd.DataFrame):

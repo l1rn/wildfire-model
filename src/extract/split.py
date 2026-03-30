@@ -5,21 +5,24 @@ import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-def temporal_split(
-    df: pd.DataFrame,
-    test_size: float = 0.1,
-    val_size: float = 0.2
-):
-    df = df.sort_values('valid_time')
+def temporal_split(df, val_size=0.15, test_size=0.1):
+    years = sorted(df['year'].unique())
+    n_years = len(years)
+    n_test = max(1, int(n_years * test_size))
+    n_val = max(1, int(n_years * val_size))
+    n_train = n_years - n_test - n_val
+    if n_train < 1:
+        n_train = 1
+        n_val = max(0, n_val - 1)  
+        n_test = max(0, n_test - 1)
+    train_years = years[:n_train]
+    val_years = years[n_train:n_train+n_val]
+    test_years = years[n_train+n_val:]
     
-    val_idx = int(len(df) * (1  - test_size - val_size))
-    test_idx = int(len(df) * (1 - test_size))
-    
-    train_years = df.iloc[:val_idx]
-    val_years = df.iloc[val_idx:test_idx]
-    test_years = df.iloc[test_idx:]
-
-    logger.info(train_years['year'].unique())
-    
-    logger.info(test_years['year'].unique())
-    return train_years, val_years, test_years
+    logger.info(f"Train years: {train_years}")
+    logger.info(f"Validation years: {val_years}")
+    logger.info(f"Test years: {test_years}")
+    train = df[df['year'].isin(train_years)]
+    val = df[df['year'].isin(val_years)]
+    test = df[df['year'].isin(test_years)]
+    return train, val, test

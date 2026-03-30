@@ -59,7 +59,7 @@ class WildfirePipeline:
         if self.use_lag:
             extra = [
                 "temp_lag1", "vpd_lag1", "precip_lag1",
-                "vpd_ghm_interaction_lag1"
+                "vpd_fire_lag1_interaction"
             ]
         else:
             extra = [
@@ -67,11 +67,15 @@ class WildfirePipeline:
             ]
 
         engineered = [
-            "month_sin", "month_cos",
             "vpd_ghm_interaction",       
             "temp_ghm_interaction",
             "temp_precip_interaction",
-            # "vpd_3m_avg",
+            "vpd_3m_avg",
+            "vpd_3m_avg_ghm_interaction",
+            "vpd_14p_max",
+            "precip_30p_sum",
+            "synergy_vpd_ghm",
+            "synergy_vpd_infrastructure"
         ]
 
         anthropogenic = [
@@ -209,7 +213,7 @@ class WildfirePipeline:
             smote = SMOTEENN(sampling_strategy=self.smote_ratio, random_state=42)
             X_train, y_train = smote.fit_resample(X_train, y_train)
             
-        scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
+        scale_pos_weight = min(10, (y_train == 0).sum() / (y_train == 1).sum())
         
         X_val = val[self.features]
         y_val = val["fire"]
@@ -233,27 +237,7 @@ class WildfirePipeline:
                 self.model = LGBMClassifier(**model_params)
         else:
             self.model = self.model_factory()
-        class CalibratedXGB:
-            def __init__(self, base_model, calibrator):
-                self.base_model = base_model
-                self.calibrator = calibrator
-                self.feature_importances_ = base_model.feature_importances_
-
-            def predict_proba(self, X):
-                return self.calibrator.predict_proba(X)
-            
-        self.base_model = self.model
-        from sklearn.calibration import CalibratedClassifierCV
-        
-        self.base_model.fit(X_train, y_train)
-        calibrator = CalibratedClassifierCV(
-            estimator=self.base_model,
-            method='isotonic',
-            cv=3
-        )
-        calibrator.fit(X_val, y_val)
-
-        self.model = CalibratedXGB(self.base_model, calibrator)
+        self.model.fit(X_train, y_train)
         
         X_test = test[self.features]
         y_test = test['fire']
@@ -349,7 +333,13 @@ class WildfirePipeline:
         print(f"Probability array shape: {probs.shape}")
 
         df_full['fire_probability'] = probs
-
+        print("\n === Risk Percentile Analysis ===")
+        percentile_results = tr.evaluate_risk_percentiles(test)
+        print(percentile_results.to_string(index=False))
+        
+        maps.plot_cumulative_gains(
+            test, output_file=Path(PROCESSED_DIR) / "cumulative_gains_chart.png"
+        )
         if 'fire_probability' not in df_full.columns:
             print("ERROR: fire_probability column was not added!")
         else:
@@ -384,7 +374,7 @@ class WildfirePipeline:
         if "Visualize Risk-map" in options:
             self.visualize(model.base_model, df_full)
         if "SHAP Explanation Bar & Summary" in options:
-            tr.explain_model_with_shap(model.base_model, test[self.features])
+            tr.explain_model_with_shap(model, test[self.features])
         if "Generate Partial Dependence Plots (PDP)" in options:
             tr.generate_partial_dependence_plots(model.base_model, test[self.features])
         if "Save the map in TIFF format for QGIS" in options:
@@ -408,7 +398,7 @@ class WildfirePipeline:
         if "Animate Risk Over Time" in options:
             maps.animate_risk_over_time(df_full, years=None, output_file=cfg.risk_map_animation_output)
         if "Map of Top Driver" in options:
-            maps.map_to_driver(df_full, output_file=Path(PROCESSED_DIR) / "top_driver_map.png")
+            maps.map_top_driver(df_full, output_file=Path(PROCESSED_DIR) / "top_driver_map.png")
         if "Threshold Performance Plot" in options:
             test_probs = model.predict_proba(test[self.features])[:, 1]
             tr.plot_threshold_analysis(test['fire'], test_probs, output_file=Path(PROCESSED_DIR) / "threshold_analysis.png")

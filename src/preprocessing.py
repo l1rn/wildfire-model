@@ -1,16 +1,22 @@
 from src.extract import data_loader
-from src.config import RAW_DIR, PROCESSED_DIR, Config
+from src.config import Config
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+import math
 
 from rasterio.features import rasterize
 import xarray as xr
 
 from tqdm.auto import tqdm
 
+import logging
+
 KELVIN = 273.15
 cfg = Config()
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 def calculate_vpd(t2m_k, d2m_k):
     """
@@ -37,19 +43,58 @@ def calculate_vpd(t2m_k, d2m_k):
     vpd_pa = es - ea
     return vpd_pa / 100.0
 
-def unify_xy(*arrays):
-    return [da.rename({"latitude": "y", "longitude": "x"}) for da in arrays]
-
-def broadcast_static_layers(
-    main_dim: xr.DataArray, **static_layers
+def harmonize_fire_records(
+    off_df: gpd.GeoDataFrame,
+    v_df: gpd.GeoDataFrame,
+    spatial_radius_m: float = 5000,
+    temporal_window_days: int = 7
 ):
-    broadcasted = {}
-    for name, layer in static_layers.items():
-        layer_expanded = layer.expand_dims(valid_time=main_dim.valid_time)
-        broadcasted[name] = layer_expanded
-    return broadcasted
+    off_df = off_df.copy()
+    v_df = v_df.copy()
+    
+    off_df['acq_date'] = pd.to_datetime(off_df['acq_date'])
+    v_df['acq_date'] = pd.to_datetime(v_df['acq_date'])
+    
+    original_crs = off_df.crs
+    off_df['fire_id'] = off_df.index
+    
+    off_proj = off_df.to_crs("EPSG:3857")
+    v_proj = v_df.to_crs("EPSG:3857")
 
-def process_data(target_resolution=0.25, time_agg='monthly', use_area=True, min_area=0):
+    v_proj['viirs_date'] = v_proj['acq_date']
+    v_proj_isolated = v_proj[['viirs_date', 'geometry']].copy()
+
+    joined = gpd.sjoin_nearest(
+        off_proj,
+        v_proj_isolated,
+        how='left',
+        max_distance=spatial_radius_m,
+        distance_col='spatial_distance'
+    )
+    
+    joined['time_diff'] = joined['acq_date'] - joined['viirs_date']
+    
+    valid_temporal_mask = (
+        (joined['time_diff'] >= pd.Timedelta(days=0)) &
+        (joined['time_diff'] <= pd.Timedelta(days=temporal_window_days))
+    )
+    
+    matched = joined[valid_temporal_mask].copy()
+    
+    if not matched.empty:
+        matched = matched.sort_values(by=['fire_id', 'viirs_date'], ascending=[True, True])        
+        matched = matched.drop_duplicates(subset=['fire_id'], keep='first')
+        off_proj.loc[off_proj['fire_id'].isin(matched['fire_id']), 'acq_date'] = matched.set_index('fire_id')['viirs_date']
+        match_count = len(matched)
+        logger.info(f"Successfully harmonized {match_count} records ({match_count/len(off_proj)*100:.2f}%).")
+    else:
+        logger.warning("No records matched within the specified spatiotemporal parameters.")
+    
+    off_proj = off_proj.drop(columns=['fire_id'])
+    harmonized_gdf = off_proj.to_crs(original_crs)
+    return harmonized_gdf
+
+def process_data(target_resolution=0.2, time_agg='monthly', use_area=True, min_area=10):
     """ Data Integration with resampling to coarser resolution """
     topo = data_loader.load_static_raster(cfg.raw_dem)
     if topo is None:
@@ -61,18 +106,28 @@ def process_data(target_resolution=0.25, time_agg='monthly', use_area=True, min_
     peat = data_loader.load_static_raster(cfg.raw_peatland)
     pop = data_loader.load_static_raster(cfg.raw_pop_density)
     ds = data_loader.load_meterological(cfg.raw_weather)
-    firms = data_loader.load_russian_fires(cfg.raw_fire_data)   
+    fire_data = data_loader.load_russian_fires("data/raw/fires_inside_borders.csv")   
+    viirs_firms = data_loader.load_firms("/home/lirn/geo_env/data/raw/fire_archive_modis.csv")
 
+
+    if viirs_firms is not None and not viirs_firms.empty:
+        fire_data = harmonize_fire_records(
+            off_df=fire_data, 
+            v_df=viirs_firms, 
+            spatial_radius_m=5000, 
+            temporal_window_days=7
+        )
     if time_agg == 'monthly':
         climate_freq = '1ME'
-        fire_period_col = 'acq_date'
+        fire_data['period'] = fire_data['acq_date'].dt.to_period('M')
+        fire_period_col = 'period'
     elif time_agg == 'quarterly':
         climate_freq = '1QE'
-        firms['period'] = firms['acq_date'].dt.to_period('Q')
+        fire_data['period'] = fire_data['acq_date'].dt.to_period('Q')
         fire_period_col = 'period'
     elif time_agg == 'yearly':
         climate_freq = '1YE'
-        firms['period'] = firms['acq_date'].dt.to_period('Y')
+        fire_data['period'] = fire_data['acq_date'].dt.to_period('Y')
         fire_period_col = 'period'
     monthly = ds.resample(valid_time=climate_freq).mean()
     
@@ -156,11 +211,11 @@ def process_data(target_resolution=0.25, time_agg='monthly', use_area=True, min_
             else:
                 processed_static[name] = da.fillna(0)
     
-    if use_area and 'area_total' in firms.columns:
-        firms = firms[firms['area_total'] > min_area].copy()
+    if use_area and 'area_total' in fire_data.columns:
+        fire_data = fire_data[fire_data['area_total'] > min_area].copy()
     
-    firms['period_key'] = firms[fire_period_col]
-    grouped = firms.groupby('period_key')    
+    fire_data['period_key'] = fire_data[fire_period_col]
+    grouped = fire_data.groupby('period_key')    
 
 
     if time_agg == 'monthly':
@@ -170,12 +225,17 @@ def process_data(target_resolution=0.25, time_agg='monthly', use_area=True, min_
     elif time_agg == 'yearly':
         period_str = 'Y'
     fire_rasters = []
+    def buffer_point(point, area_ha):
+        area_m2 = area_ha * 1000
+        radius = math.sqrt(area_m2 / math.pi)
+        return point.buffer(radius)
+    
     for time in tqdm(t2m_coarse.valid_time.values, desc="Rasterizing Fire Data"):
         period = pd.to_datetime(time).to_period(period_str)
         if period in grouped.groups:
             monthly_fires = grouped.get_group(period)
             if use_area:
-                shapes = [(row.geometry, row['area_total']) for _, row in monthly_fires.iterrows()]
+                shapes = [(row.geometry, row['area_beginning']) for _, row in monthly_fires.iterrows()]
                 fire_array = rasterize(shapes, out_shape=template.shape,
                                        transform=template.rio.transform(),
                                        fill=0, dtype=np.float32)

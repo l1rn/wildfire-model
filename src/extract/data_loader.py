@@ -34,9 +34,20 @@ def load_static_raster(path: str) -> Optional[xr.DataArray]:
     except Exception as e:
         print(f"Failed to open TIFF: {e}")
         return None
-    
 
-        
+def load_gee_ndvi(tif_path: str, start_year: int = 2010, end_year: int = 2025):
+    da = rioxarray.open_rasterio(tif_path)
+    da = da.where(da != 9999, np.nan)
+    
+    time_index = pd.date_range(start=f'{start_year}-01-01',
+                               end=f'{end_year}-12-31',
+                               freq='MS')
+    
+    time_index = time_index + pd.offsets.MonthEnd(0)
+    da = da.rename({'band': 'valid_time'})
+    da['valid_time'] = time_index
+    return da
+    
 def load_firms(path: str) -> Optional[gpd.GeoDataFrame]:
     try:
         df = pd.read_csv(path)
@@ -101,16 +112,13 @@ def create_new_features(df: pd.DataFrame):
     df["temp_precip_interaction"] = df["temp"] * df["precip"]
     df["dew_ghm_interaction"] = df["dew"] * df["ghm"]
     df["dew_infrastructure_interaction"] = df["dew"] * df["dist_oil_gas"]
-    df['vpd_14p_max'] = (
-        df.groupby(['y', 'x'])['vpd']
-        .transform(lambda x: x.rolling(window=14, min_periods=1).max())
-    )
+
     df['precip_30p_sum'] = (
         df.groupby(['y', 'x'])['precip']
         .transform(lambda x: x.rolling(window=30, min_periods=1).sum())
     )
-    df['synergy_vpd_ghm'] = df['vpd_14p_max'] * df['ghm']
-    df['synergy_vpd_infrastructure'] = df['vpd_14p_max'] * (1 / (df['dist_oil_gas'] + 1))
+    
+    df['wind_slope_synergy'] = df['slope'] * np.sqrt(df['u10']**2 + df['v10']**2)
     return df
 
 def create_lag_features(df: pd.DataFrame, lag_vars=['vpd','temp','precip','fire'], lags=1):

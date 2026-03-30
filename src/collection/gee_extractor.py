@@ -39,7 +39,7 @@ class GeeExtractor:
             .select(['DEM', 'slope']) \
             .rename(['elevation', 'slope']) \
             .float()
-        
+                
         ghm = ee.ImageCollection("projects/sat-io/open-datasets/GHM/HM_1990_2020_OVERALL_300M") \
             .filter(ee.Filter.eq('year', 2020)) \
             .first().clip(self.bbox)
@@ -185,6 +185,62 @@ class GeeExtractor:
         task.start()
         print("Monthly multiband export started")
         
+    def export_lai_monthly(self):
+        start_year = 2010
+        end_year = 2024
+        
+        years = ee.List.sequence(start_year, end_year)
+        months = ee.List.sequence(1, 12)
+        def make_monthly(y):
+            y = ee.Number(y)
+            
+            def make_image(m):
+                m = ee.Number(m)
+                start = ee.Date.fromYMD(y, m, 1)
+                end = start.advance(1, 'month')
+                
+                collection = (
+                    ee.ImageCollection("projects/sat-io/open-datasets/BU_LAI_FPAR/wgs_005degree_bimonthly")
+                    .filterDate(start, end)
+                    .filterBounds(self.bbox)
+                    .select('LAI')
+                )
+                
+                count = collection.size()
+                
+                image = ee.Image(
+                    ee.Algorithms.If(
+                        count.gt(0),
+                        collection.mean().toFloat(),
+                        ee.Image(0).constant(-9999).toFloat()
+                    )
+                ).clip(self.bbox)
+                
+                band_name = ee.String('LAI_') \
+                    .cat(y.int().format()) \
+                    .cat('_') \
+                    .cat(m.format("%02d"))
+            
+                return image.rename([band_name])
+            return months.map(make_image)
+        
+        monthly_images = years.map(make_monthly).flatten()
+        monthly_collection = ee.ImageCollection(monthly_images)
+        
+        stacked_image = monthly_collection.toBands()
+        print("Submitting LAI multiband export...")  
+        task = ee.batch.Export.image.toDrive(
+            image=stacked_image,
+            description='KHMAO_LAI_monthly_2010_2024',
+            fileNamePrefix='khmao_lai_monthly_2010_2024',
+            region=self.bbox,
+            scale=10000, 
+            crs='EPSG:4326',
+            maxPixels=1e13,
+            folder='GEE_KHMAO_RAW'
+        )
+        task.start()
+        print("LAI export started! Check your Google Drive.")
     def validate_with_sentinel2(self, csv_path):
         self.initialize()    
         
@@ -248,8 +304,18 @@ class GeeExtractor:
         return res_df
     def run(self):
         self.initialize()    
-        ans = int(input("choose (1 / 0): "))
-        if ans == 0:
+        options = questionary.checkbox(
+            "Select options:",
+            choices=[
+                "raster images (gee pipeline)",
+                "ndvi monthly images",
+                "lai monthly images"
+            ]
+        ).ask()
+        
+        if "raster images (gee pipeline)" in options:
             self.run_gee_pipeline()
-        elif ans == 1:
+        if "ndvi monthly images" in options:
             self.monthly_image()
+        if "lai monthly images" in options:
+            self.export_lai_monthly()

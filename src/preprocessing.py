@@ -108,7 +108,7 @@ def process_data(target_resolution=0.2, time_agg='monthly', use_area=True, min_a
     ds = data_loader.load_meterological(cfg.raw_weather)
     fire_data = data_loader.load_russian_fires("data/raw/fires_inside_borders.csv")   
     viirs_firms = data_loader.load_firms("/home/lirn/geo_env/data/raw/fire_archive_modis.csv")
-
+    ndvi = data_loader.load_gee_ndvi("/home/lirn/geo_env/data/raw/khmao_ndvi_monthly_2010_2025.tif")
 
     if viirs_firms is not None and not viirs_firms.empty:
         fire_data = harmonize_fire_records(
@@ -180,6 +180,9 @@ def process_data(target_resolution=0.2, time_agg='monthly', use_area=True, min_a
     
     v10_coarse = v10.interp(latitude=new_lat, longitude=new_lon, method="linear")
     v10_coarse = v10_coarse.rename({'latitude': 'y', 'longitude': 'x'})
+    
+    ndvi_coarse = ndvi.interp(y=new_lat, x=new_lon, method="linear")
+    ndvi_coarse.name = "ndvi"
     
     static_stack = {
         "dem": topo.sel(band=1),
@@ -278,6 +281,7 @@ def process_data(target_resolution=0.2, time_agg='monthly', use_area=True, min_a
         "sm1": sm1_coarse,
         "u10": u10_coarse,
         "v10": v10_coarse,
+        "ndvi": ndvi_coarse,
         "fire": fire_coarse
     }
     

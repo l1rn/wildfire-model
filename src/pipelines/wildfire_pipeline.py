@@ -53,7 +53,7 @@ class WildfirePipeline:
     def build_features(self):
         base = [
             "dem", "landcover", "slope", "sm1", 
-            "u10", "v10", "peatland", "month"
+            "u10", "v10", "peatland", "month", "ndvi"
         ]
 
         if self.use_lag:
@@ -63,21 +63,18 @@ class WildfirePipeline:
             ]
         else:
             extra = [
-                "temp", "vpd", "precip"            
+                "temp", "vpd", "precip"       
             ]
 
         engineered = [
             "month", "month_sin", "month_cos",
             "vpd_ghm_interaction", 
             "vpd_3m_avg",
-            "vpd_3m_avg_ghm_interaction",
-            "vpd_14p_max",
             "vpd_oil_gas_interaction",      
             "temp_ghm_interaction",
             "temp_precip_interaction",
             "precip_30p_sum",
-            "synergy_vpd_ghm",
-            "synergy_vpd_infrastructure",
+            "wind_slope_synergy",
         ]
 
         anthropogenic = [

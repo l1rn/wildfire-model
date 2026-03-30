@@ -129,6 +129,8 @@ def process_data(target_resolution=0.2, time_agg='monthly', use_area=True, min_a
         climate_freq = '1YE'
         fire_data['period'] = fire_data['acq_date'].dt.to_period('Y')
         fire_period_col = 'period'
+        
+        
     monthly = ds.resample(valid_time=climate_freq).mean()
     
     t2m = monthly["t2m"]
@@ -136,12 +138,10 @@ def process_data(target_resolution=0.2, time_agg='monthly', use_area=True, min_a
     u10 = monthly["u10"]
     v10 = monthly["v10"]
     sm1 = monthly["swvl1"]
+    vpd = calculate_vpd(t2m, d2m)
+    
     tp = ds["tp"].resample(valid_time=climate_freq).sum() * 1000 
     
-    wind_speed = np.sqrt(u10**2 + v10**2)
-    wind_speed.name = "wind_speed"
-    vpd = calculate_vpd(t2m, d2m)
-
     lat_orig = t2m.latitude.values
     lon_orig = t2m.longitude.values
     lat_min, lat_max = lat_orig.min(), lat_orig.max()
@@ -175,8 +175,11 @@ def process_data(target_resolution=0.2, time_agg='monthly', use_area=True, min_a
     sm1_coarse = sm1.interp(latitude=new_lat, longitude=new_lon, method="linear")
     sm1_coarse = sm1_coarse.rename({'latitude': 'y', 'longitude': 'x'})
     
-    wind_speed_coarse = wind_speed.interp(latitude=new_lat, longitude=new_lon, method="linear")
-    wind_speed_coarse = wind_speed_coarse.rename({'latitude': 'y', 'longitude': 'x'})
+    u10_coarse = u10.interp(latitude=new_lat, longitude=new_lon, method="linear")
+    u10_coarse = u10_coarse.rename({'latitude': 'y', 'longitude': 'x'})
+    
+    v10_coarse = v10.interp(latitude=new_lat, longitude=new_lon, method="linear")
+    v10_coarse = v10_coarse.rename({'latitude': 'y', 'longitude': 'x'})
     
     static_stack = {
         "dem": topo.sel(band=1),
@@ -233,13 +236,23 @@ def process_data(target_resolution=0.2, time_agg='monthly', use_area=True, min_a
     for time in tqdm(t2m_coarse.valid_time.values, desc="Rasterizing Fire Data"):
         period = pd.to_datetime(time).to_period(period_str)
         if period in grouped.groups:
-            monthly_fires = grouped.get_group(period)
+            monthly_fires = grouped.get_group(period).copy()
             if use_area:
-                shapes = [(row.geometry, row['area_beginning']) for _, row in monthly_fires.iterrows()]
+                metric_fires = gpd.GeoDataFrame(
+                    monthly_fires,
+                    geometry='geometry',
+                    crs='EPSG:4326').to_crs('EPSG:3857')
+                
+                areas_m2 = metric_fires['area_total'].fillna(10) * 10000 
+                radii = np.sqrt(areas_m2 / np.pi)
+                metric_fires['geometry'] = metric_fires.geometry.buffer(radii)
+                
+                deg_fires = metric_fires.to_crs("EPSG:4326")
+                shapes = [(geom, 1) for geom in deg_fires.geometry]
+                
                 fire_array = rasterize(shapes, out_shape=template.shape,
                                        transform=template.rio.transform(),
-                                       fill=0, dtype=np.float32)
-                fire_array = (fire_array > 0).astype(np.uint8)
+                                       fill=0, dtype=np.uint8, all_touched=True)
             else:
                 shapes = [(geom, 1) for geom in monthly_fires.geometry]
             
@@ -263,7 +276,8 @@ def process_data(target_resolution=0.2, time_agg='monthly', use_area=True, min_a
         "vpd": vpd_coarse,
         "precip": tp_coarse,
         "sm1": sm1_coarse,
-        "wind_speed": wind_speed_coarse,
+        "u10": u10_coarse,
+        "v10": v10_coarse,
         "fire": fire_coarse
     }
     

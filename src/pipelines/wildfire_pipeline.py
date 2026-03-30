@@ -53,7 +53,7 @@ class WildfirePipeline:
     def build_features(self):
         base = [
             "dem", "landcover", "slope", "sm1", 
-            "wind_speed", "peatland", "month"
+            "u10", "v10", "peatland", "month"
         ]
 
         if self.use_lag:
@@ -67,15 +67,17 @@ class WildfirePipeline:
             ]
 
         engineered = [
-            "vpd_ghm_interaction",       
-            "temp_ghm_interaction",
-            "temp_precip_interaction",
+            "month", "month_sin", "month_cos",
+            "vpd_ghm_interaction", 
             "vpd_3m_avg",
             "vpd_3m_avg_ghm_interaction",
             "vpd_14p_max",
+            "vpd_oil_gas_interaction",      
+            "temp_ghm_interaction",
+            "temp_precip_interaction",
             "precip_30p_sum",
             "synergy_vpd_ghm",
-            "synergy_vpd_infrastructure"
+            "synergy_vpd_infrastructure",
         ]
 
         anthropogenic = [
@@ -213,7 +215,7 @@ class WildfirePipeline:
             smote = SMOTEENN(sampling_strategy=self.smote_ratio, random_state=42)
             X_train, y_train = smote.fit_resample(X_train, y_train)
             
-        scale_pos_weight = min(10, (y_train == 0).sum() / (y_train == 1).sum())
+        scale_pos_weight = min(50, (y_train == 0).sum() / (y_train == 1).sum())
         
         X_val = val[self.features]
         y_val = val["fire"]
@@ -366,7 +368,7 @@ class WildfirePipeline:
         
         if "Feature Importance from the model" in options:
             maps.plot_feature_importance(
-                model.base_model, 
+                model, 
                 features=self.features, 
                 top_n=15, 
                 output_file=Path(PROCESSED_DIR) / "feature_importance.png" 

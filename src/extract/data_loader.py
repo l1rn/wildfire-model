@@ -34,6 +34,8 @@ def load_static_raster(path: str) -> Optional[xr.DataArray]:
     except Exception as e:
         print(f"Failed to open TIFF: {e}")
         return None
+    
+
         
 def load_firms(path: str) -> Optional[gpd.GeoDataFrame]:
     try:
@@ -67,11 +69,11 @@ def load_russian_fires(filepath: str, use_start_date: bool = True):
     df = pd.read_csv(filepath, sep=';')  
     df['date_beginning'] = pd.to_datetime(df['date_beginning'])
     df['acq_date'] = df['date_beginning']
-    df['type'] = df['type'].map({'Лесные': 0, 'Нелесные': 2})
     
-    cols = ['geometry', 'acq_date', 'type']
+    cols = ['geometry', 'acq_date']
     if 'area_beginning' in df.columns:
         cols.append('area_beginning')
+    cols.append('area_total')
     
     if 'code' in df.columns:
         df = df.sort_values('date_beginning').groupby('code').first().reset_index()
@@ -86,7 +88,7 @@ def create_new_features(df: pd.DataFrame):
     df["month"] = df["valid_time"].dt.month
     df["month_sin"] = np.sin(2 * np.pi * df['month'] / 12)
     df["month_cos"] = np.cos(2 * np.pi * df['month'] / 12)
-    df["vpd_pop_density_interaction"] = df["vpd"] * df["pop_density"]
+    df["vpd_oil_gas_interaction"] = df["vpd"] * df["dist_oil_gas"]
     df["vpd_3m_avg"] = (
         df.groupby(['x', 'y'])['vpd']
         .rolling(3, min_periods=1)

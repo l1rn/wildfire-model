@@ -130,8 +130,8 @@ class GeeExtractor:
             print(f" - Started {name}")
     
     def monthly_image(self):
-        start_year = 2016
-        end_year = 2026
+        start_year = 2010
+        end_year = 2025
         
         years = ee.List.sequence(start_year, end_year)
         months = ee.List.sequence(1, 12)
@@ -174,10 +174,10 @@ class GeeExtractor:
         print("Submitting single multiband export...")  
         task = ee.batch.Export.image.toDrive(
             image=stacked_image,
-            description='KHMAO_NDVI_monthly_2016_2026',
-            fileNamePrefix='khmao_ndvi_monthly_2016_2026',
+            description='KHMAO_NDVI_monthly_2010_2025',
+            fileNamePrefix='khmao_ndvi_monthly_2010_2025',
             region=self.bbox,
-            scale=500,
+            scale=10000,
             crs='EPSG:4326',
             maxPixels=1e13,
             folder='GEE_KHMAO_RAW'

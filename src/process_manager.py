@@ -1,6 +1,6 @@
 from src.extract import data_loader
 from src.config import PROCESSED_DIR, RAW_DIR
-from src.collection import GeeExtractor
+from src.collection import GeeExtractor, cds_extractor
 from src.models import cross_validation, models
 from src.cli import menu
 from src.pipelines import WildfirePipeline, TemperaturePipeline
@@ -106,8 +106,8 @@ def wildfire_pipeline():
                 params=best_params,
                 feature_group=group,
                 downsample_ratio=10,
-                # use_smote=True,
-                # smote_ratio=0.5,
+                use_smote=True,
+                smote_ratio=0.2,
             )
         else:
             pipeline = WildfirePipeline(
@@ -164,6 +164,9 @@ def execute_modis_pipeline():
 def execute_validation():
     collection.validate_with_sentinel2(f"{RAW_DIR}/validation_sample.csv")
     
+def execute_cds_era5():
+    cds_extractor.extract_era5()
+    
 options = {
 1: {
     1: show_era5_head,
@@ -179,7 +182,8 @@ options = {
 },
 3: {
     1: execute_modis_pipeline,
-    2: execute_validation
+    2: execute_validation,
+    3: execute_cds_era5
 },
 4: {
     1: summarize_cv,

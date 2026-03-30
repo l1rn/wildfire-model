@@ -5,7 +5,7 @@ import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-def temporal_split(df, val_size=0.15, test_size=0.1):
+def temporal_split(df, val_size=0.1, test_size=0.15):
     years = sorted(df['year'].unique())
     n_years = len(years)
     n_test = max(1, int(n_years * test_size))

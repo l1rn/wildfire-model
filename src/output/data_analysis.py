@@ -10,7 +10,7 @@ def execute_eda_pipeline(df):
     fire = df[df['fire'] == 1]
     no_fire = df[df['fire'] == 0]
     cont_vars = ['temp_c', 'vpd', 'precip', 'sm1', 'u10', 'v10', 'dem', 'ndvi',
-                 'slope', 'ghm', 'dist_oil_gas', 'pop_density', 'peatland']
+                 'slope', 'ghm', 'dist_oil_gas', 'pop_density', 'peatland', 'lai', 'cisi']
     n_vars = len(cont_vars)
     n_cols = 3
     n_rows = (n_vars + n_cols - 1) // n_cols

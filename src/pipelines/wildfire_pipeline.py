@@ -14,7 +14,8 @@ from sklearn.metrics import (
     f1_score,
     recall_score,
     accuracy_score,
-    fbeta_score
+    fbeta_score,
+    make_scorer
 )
 
 from sklearn.model_selection import RandomizedSearchCV, PredefinedSplit
@@ -53,7 +54,7 @@ class WildfirePipeline:
     def build_features(self):
         base = [
             "dem", "landcover", "slope", "sm1", 
-            "u10", "v10", "peatland", "month", "ndvi"
+            "u10", "v10", "peatland", "ndvi", "lai"
         ]
 
         if self.use_lag:
@@ -67,18 +68,18 @@ class WildfirePipeline:
             ]
 
         engineered = [
-            "month", "month_sin", "month_cos",
             "vpd_ghm_interaction", 
             "vpd_3m_avg",
-            "vpd_oil_gas_interaction",      
             "temp_ghm_interaction",
             "temp_precip_interaction",
+            "temp_cisi_interaction",
+            "dew_ghm_interaction",
             "precip_30p_sum",
             "wind_slope_synergy",
         ]
 
         anthropogenic = [
-            "dist_oil_gas", "pop_density", "ghm"
+            "dist_oil_gas", "pop_density", "ghm", "cisi"
         ]
 
         all_candidates = base + extra + engineered + anthropogenic
@@ -116,11 +117,12 @@ class WildfirePipeline:
             test_fold = np.array([-1]*len(X_train) + [0]*len(X_val))
             ps = PredefinedSplit(test_fold)
             
+            f2_scorer = make_scorer(fbeta_score, beta=2.0)
             random_search = RandomizedSearchCV (
                 estimator=base_model,
                 param_distributions=param_grid,
                 cv = ps, 
-                scoring='average_precision',
+                scoring=f2_scorer,
                 n_jobs=-1,
                 verbose=1,
                 random_state=cfg.RANDOM_SEED
@@ -212,7 +214,7 @@ class WildfirePipeline:
             smote = SMOTEENN(sampling_strategy=self.smote_ratio, random_state=42)
             X_train, y_train = smote.fit_resample(X_train, y_train)
             
-        scale_pos_weight = min(50, (y_train == 0).sum() / (y_train == 1).sum())
+        scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
         
         X_val = val[self.features]
         y_val = val["fire"]

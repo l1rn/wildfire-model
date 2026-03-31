@@ -94,7 +94,7 @@ def harmonize_fire_records(
     harmonized_gdf = off_proj.to_crs(original_crs)
     return harmonized_gdf
 
-def process_data(target_resolution=0.2, time_agg='monthly', use_area=True, min_area=10):
+def process_data(target_resolution=0.25, time_agg='monthly', use_area=True, min_area=10):
     """ Data Integration with resampling to coarser resolution """
     topo = data_loader.load_static_raster(cfg.raw_dem)
     if topo is None:
@@ -102,6 +102,7 @@ def process_data(target_resolution=0.2, time_agg='monthly', use_area=True, min_a
     
     lc = data_loader.load_static_raster(cfg.raw_landcover)
     ghm = data_loader.load_static_raster(cfg.raw_human_mod)
+    cisi = data_loader.load_static_raster("/home/lirn/geo_env/data/raw/khmao_cisi_1km.tif")
     oil_gas = data_loader.load_static_raster(cfg.raw_oil_gas)
     peat = data_loader.load_static_raster(cfg.raw_peatland)
     pop = data_loader.load_static_raster(cfg.raw_pop_density)
@@ -109,6 +110,7 @@ def process_data(target_resolution=0.2, time_agg='monthly', use_area=True, min_a
     fire_data = data_loader.load_russian_fires("data/raw/fires_inside_borders.csv")   
     viirs_firms = data_loader.load_firms("/home/lirn/geo_env/data/raw/fire_archive_modis.csv")
     ndvi = data_loader.load_gee_ndvi("/home/lirn/geo_env/data/raw/khmao_ndvi_monthly_2010_2025.tif")
+    lai = data_loader.load_gee_ndvi("/home/lirn/geo_env/data/raw/khmao_lai_monthly_2010_2024.tif", end_year=2024)
 
     if viirs_firms is not None and not viirs_firms.empty:
         fire_data = harmonize_fire_records(
@@ -182,13 +184,19 @@ def process_data(target_resolution=0.2, time_agg='monthly', use_area=True, min_a
     v10_coarse = v10_coarse.rename({'latitude': 'y', 'longitude': 'x'})
     
     ndvi_coarse = ndvi.interp(y=new_lat, x=new_lon, method="linear")
+    ndvi_coarse = ndvi_coarse.fillna(0)
     ndvi_coarse.name = "ndvi"
+    
+    lai_coarse = lai.interp(y=new_lat, x=new_lon, method="linear")
+    lai_coarse = lai_coarse.fillna(0)
+    lai_coarse.name = "lai"
     
     static_stack = {
         "dem": topo.sel(band=1),
         "slope": topo.sel(band=2),
         "landcover": lc,
         "ghm": ghm,
+        "cisi": cisi,
         "pop_density": pop,
         "dist_oil_gas": oil_gas,
         "peatland": peat
@@ -205,7 +213,7 @@ def process_data(target_resolution=0.2, time_agg='monthly', use_area=True, min_a
     for name, da in list(processed_static.items()):
         nans_before = da.isnull().sum().item()
         if nans_before > 0:
-            if name in ["slope", "ghm"]:
+            if name in ["slope", "ghm", "cisi"]:
                 fill_value = float(da.median())
                 processed_static[name] = da.fillna(fill_value)
             elif name == "dist_oil_gas":
@@ -282,6 +290,7 @@ def process_data(target_resolution=0.2, time_agg='monthly', use_area=True, min_a
         "u10": u10_coarse,
         "v10": v10_coarse,
         "ndvi": ndvi_coarse,
+        "lai": lai_coarse,
         "fire": fire_coarse
     }
     
@@ -315,6 +324,7 @@ def upload_dataset_to_parquet(
 ):
     ds["valid_time"] = pd.to_datetime(ds["valid_time"])
     ds["year"] = ds["valid_time"].dt.year
-    
+    correlation = ds['ghm'].corr(ds['cisi'])
+    print(f"Correlation between GHM and CISI: {correlation}")
     ds.to_parquet(cfg.processed_table, index=True)
     

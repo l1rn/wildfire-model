@@ -64,7 +64,10 @@ class GeeExtractor:
             .sort('system:time_start', False) \
             .first().rename("pop_density").clip(self.bbox)
         
-        years = range(2016, 2027) 
+        cisi = ee.Image("projects/sat-io/open-datasets/CISI/global_CISI") \
+            .clip(self.bbox).rename("cisi")
+            
+        years = range(2016, 2025) 
         
         yearly_bands = []
         
@@ -101,7 +104,8 @@ class GeeExtractor:
                 "road_density",
                 "peatland_flag",
                 "pop_density",
-                "burned_area_yearly"
+                "burned_area_yearly",
+                "cisi"
             ]
         ).ask()
         
@@ -113,7 +117,8 @@ class GeeExtractor:
             "road_density": road_density,
             "peatland_flag": peat,
             "pop_density": pop_density,
-            "burned_area_yearly": burned_area_multiband
+            "burned_area_yearly": burned_area_multiband,
+            "cisi": cisi
         }
         
         layers = {key: layer_mapping[key] for key in options}
@@ -241,6 +246,63 @@ class GeeExtractor:
         )
         task.start()
         print("LAI export started! Check your Google Drive.")
+    def export_fpar_monthly(self):
+        start_year = 2010
+        end_year = 2024
+        
+        years = ee.List.sequence(start_year, end_year)
+        months = ee.List.sequence(1, 12)
+        def make_monthly(y):
+            y = ee.Number(y)
+            
+            def make_image(m):
+                m = ee.Number(m)
+                start = ee.Date.fromYMD(y, m, 1)
+                end = start.advance(1, 'month')
+                
+                collection = (
+                    ee.ImageCollection("projects/sat-io/open-datasets/BU_LAI_FPAR/wgs_005degree_bimonthly")
+                    .filterDate(start, end)
+                    .filterBounds(self.bbox)
+                    .select('FPAR')
+                )
+                
+                count = collection.size()
+                
+                image = ee.Image(
+                    ee.Algorithms.If(
+                        count.gt(0),
+                        collection.mean().toFloat(),
+                        ee.Image(0).constant(-9999).toFloat()
+                    )
+                ).clip(self.bbox)
+                
+                band_name = ee.String('FPAR_') \
+                    .cat(y.int().format()) \
+                    .cat('_') \
+                    .cat(m.format("%02d"))
+            
+                return image.rename([band_name])
+            return months.map(make_image)
+    
+        monthly_images = years.map(make_monthly).flatten()
+        monthly_collection = ee.ImageCollection(monthly_images)
+        
+        stacked_image = monthly_collection.toBands()
+        print("Submitting FPAR multiband export...")  
+        task = ee.batch.Export.image.toDrive(
+            image=stacked_image,
+            description='KHMAO_LAI_monthly_2010_2024',
+            fileNamePrefix='khmao_lai_monthly_2010_2024',
+            region=self.bbox,
+            scale=10000, 
+            crs='EPSG:4326',
+            maxPixels=1e13,
+            folder='GEE_KHMAO_RAW'
+        )
+        task.start()
+        print("LAI export started! Check your Google Drive.")
+      
     def validate_with_sentinel2(self, csv_path):
         self.initialize()    
         
@@ -309,7 +371,8 @@ class GeeExtractor:
             choices=[
                 "raster images (gee pipeline)",
                 "ndvi monthly images",
-                "lai monthly images"
+                "lai monthly images",
+                "fpar monthly images",
             ]
         ).ask()
         
@@ -319,3 +382,5 @@ class GeeExtractor:
             self.monthly_image()
         if "lai monthly images" in options:
             self.export_lai_monthly()
+        if "fpar monthly images" in options:
+            self.export_fpar_monthly()

@@ -70,8 +70,8 @@ def load_master_dataset():
     df["valid_time"] = pd.to_datetime(df["valid_time"])
     df['month'] = df['valid_time'].dt.month
     
-    df = df[df['year'].isin(range(2010, 2025))]
-    df = df[df['month'].isin(cfg.WILDFIRE_SEASON_MONTHS)]
+    df = df[df['year'].isin(range(2010, 2024))]
+    # df = df[df['month'].isin(cfg.WILDFIRE_SEASON_MONTHS)]
     
     df = df[~df['landcover'].isin(cfg.NON_BURNABLE_CLASSES_LC)]
     return df
@@ -96,10 +96,10 @@ def load_russian_fires(filepath: str, use_start_date: bool = True):
 
 def create_new_features(df: pd.DataFrame):
     df["vpd_ghm_interaction"] = df["vpd"] * df["ghm"]
+    df["vpd_cisi_interaction"] = df["vpd"] * df["cisi"]
     df["month"] = df["valid_time"].dt.month
     df["month_sin"] = np.sin(2 * np.pi * df['month'] / 12)
     df["month_cos"] = np.cos(2 * np.pi * df['month'] / 12)
-    df["vpd_oil_gas_interaction"] = df["vpd"] * df["dist_oil_gas"]
     df["vpd_3m_avg"] = (
         df.groupby(['x', 'y'])['vpd']
         .rolling(3, min_periods=1)
@@ -108,11 +108,11 @@ def create_new_features(df: pd.DataFrame):
     )
     df["vpd_3m_avg_ghm_interaction"] = df["vpd_3m_avg"] * df["ghm"]
     df["temp_ghm_interaction"] = df["temp"] * df["ghm"]
-    df["temp_infrastructure_interaction"] = df["temp"] * df["dist_oil_gas"]
+    df["temp_cisi_interaction"] = df["temp"] * df["cisi"]
     df["temp_precip_interaction"] = df["temp"] * df["precip"]
     df["dew_ghm_interaction"] = df["dew"] * df["ghm"]
-    df["dew_infrastructure_interaction"] = df["dew"] * df["dist_oil_gas"]
-
+    df["ndvi_ghm_interaction"] = df["ndvi"] * df["ghm"]
+    df["ndvi_vpd_interaction"] = df["ndvi"] * df["vpd"]
     df['precip_30p_sum'] = (
         df.groupby(['y', 'x'])['precip']
         .transform(lambda x: x.rolling(window=30, min_periods=1).sum())

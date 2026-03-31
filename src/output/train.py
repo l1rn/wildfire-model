@@ -225,6 +225,37 @@ def evaluate_model(model, X, y, features, threshold=None):
 
     return threshold, probs, preds
 
+def evaluate_risk_percentiles(
+    test_df: pd.DataFrame,
+    prob_col: str = 'fire_probability',
+    target_col: str = 'fire',
+):
+    sorted_df = test_df.sort_values(by=prob_col, ascending=False).reset_index(drop=True)
+    
+    total_grid_cells = len(sorted_df)
+    total_actual_fires = sorted_df[target_col].sum()
+    
+    percentiles = [1, 5, 10, 20, 30]
+    results = []
+    
+    for p in percentiles:
+        top_k_count = int(total_grid_cells * (p / 100.0))
+
+        top_k_cells = sorted_df.head(top_k_count)
+        
+        fires_captured = top_k_cells[target_col].sum()
+        capture_rate = (fires_captured / total_actual_fires) * 100
+        
+        results.append({
+            "Risk Tier": f"Top {p}%",
+            "Grid Cells Flagged": top_k_count,
+            "Actual Fires Captured": int(fires_captured),
+            "Total Fires": int(total_actual_fires),
+            "Capture Rate (%)": round(capture_rate, 2)
+        })
+    evaluation_table = pd.DataFrame(results)
+    return evaluation_table
+
 def explain_model_with_shap(model, X_test):
     if hasattr(model, "best_estimator_"):
         model = model.best_estimator_

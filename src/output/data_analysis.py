@@ -5,10 +5,12 @@ from pathlib import Path
 
 
 def execute_eda_pipeline(df):
+    df['temp_c'] = df['temp'] - 273.15
+    
     fire = df[df['fire'] == 1]
     no_fire = df[df['fire'] == 0]
-    cont_vars = ['temp', 'vpd', 'precip', 'sm1', 'wind_speed', 'dem', 
-                 'slope', 'ghm', 'dist_oil_gas', 'pop_density', 'peatland']
+    cont_vars = ['temp_c', 'vpd', 'precip', 'sm1', 'u10', 'v10', 'dem', 'ndvi',
+                 'slope', 'ghm', 'dist_oil_gas', 'pop_density', 'peatland', 'lai', 'cisi']
     n_vars = len(cont_vars)
     n_cols = 3
     n_rows = (n_vars + n_cols - 1) // n_cols
@@ -59,7 +61,7 @@ def execute_eda_pipeline(df):
     plt.savefig(Path(EDA_DIR) / 'eda_correlation_heatmap.png', dpi=300)
     plt.close()
     
-    key_vars = ['temp', 'vpd', 'ghm', 'dist_oil_gas', 'sm1', 'wind_speed']
+    key_vars = ['temp', 'vpd', 'ghm', 'dist_oil_gas', 'sm1', 'u10', 'v10']
     fig, axes = plt.subplots(2, 3, figsize=(15,10))
     axes = axes.flatten()
     

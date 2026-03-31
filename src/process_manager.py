@@ -1,6 +1,6 @@
 from src.extract import data_loader
 from src.config import PROCESSED_DIR, RAW_DIR
-from src.collection import GeeExtractor
+from src.collection import GeeExtractor, cds_extractor
 from src.models import cross_validation, models
 from src.cli import menu
 from src.pipelines import WildfirePipeline, TemperaturePipeline
@@ -36,7 +36,7 @@ def show_master_table():
     
 def show_fire_archive_head():
     print("Showing fire archive head...")
-    firms = data_loader.load_firms(cfg.raw_firms)
+    firms = data_loader.load_firms(cfg.raw_fire_data)
     print(firms.head())
     
 def show_ghm_info():
@@ -104,10 +104,10 @@ def wildfire_pipeline():
                 use_lag=use_lag, 
                 tune=False, 
                 params=best_params,
-                use_smote=True,
-                downsample_ratio=3,
-                smote_ratio=0.5,
                 feature_group=group,
+                downsample_ratio=10,
+                # use_smote=True,
+                # smote_ratio=0.2,
             )
         else:
             pipeline = WildfirePipeline(
@@ -137,7 +137,7 @@ def plot_data():
     options = {
         1: ("plot for historical fires",
             lambda: plot_historical_fires(
-            cfg.raw_firms,
+            cfg.raw_fire_data,
             cfg.khmao_geojson,
             2022,
             7
@@ -164,6 +164,9 @@ def execute_modis_pipeline():
 def execute_validation():
     collection.validate_with_sentinel2(f"{RAW_DIR}/validation_sample.csv")
     
+def execute_cds_era5():
+    cds_extractor.extract_era5()
+    
 options = {
 1: {
     1: show_era5_head,
@@ -179,14 +182,14 @@ options = {
 },
 3: {
     1: execute_modis_pipeline,
-    2: execute_validation
+    2: execute_validation,
+    3: execute_cds_era5
 },
 4: {
     1: summarize_cv,
     2: wildfire_pipeline,
     3: temperature_pipeline,
     4: eda_execution
-    
 }}
     
 def choose_option():

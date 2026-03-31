@@ -1,4 +1,6 @@
 import matplotlib.pyplot as plt
+import seaborn as sns
+
 import pandas as pd
 import geopandas as gpd
 import pandas as pd
@@ -7,6 +9,7 @@ import numpy as np
 from src.config import Config
 from matplotlib.colors import ListedColormap
 from shapely.geometry import Point 
+from pathlib import Path
 
 import matplotlib.animation as animation
 
@@ -397,7 +400,7 @@ def plot_time_series_risk(
     plt.close()
     print(f'Time Series plot saved to {output_file}')
     
-def map_to_driver(df, driver='vpd_ghm_interaction', year=2022, month=7, output_file='top_driver_map.png'):
+def map_top_driver(df, driver='vpd_ghm_interaction', year=2022, month=7, output_file='top_driver_map.png'):
     subset = df[(df['valid_time'].dt.year==year) & (df['valid_time'].dt.month==month)].copy()
     
     if subset.empty:
@@ -449,3 +452,63 @@ def plot_feature_importance(model, features, top_n=None, output_file="feature_im
     plt.savefig(output_file, dpi=300)
     plt.close()
     print(f"Feature importance plot saved to {output_file}")
+    
+def plot_cumulative_gains(
+    test_df: pd.DataFrame,
+    prob_col: str = 'fire_probability',
+    target_col: str = 'fire',
+    output_file: Path = None
+):
+    sorted_df = test_df.sort_values(by=prob_col, ascending=False).reset_index(drop=True)
+
+    total_samples = len(sorted_df)
+    total_fires = sorted_df[target_col].sum()
+    
+    sorted_df['cumulative_samples_pct'] = (sorted_df.index + 1) / total_samples * 100
+    sorted_df['cumulative_fires_pct'] = sorted_df[target_col].cumsum() / total_fires * 100
+    
+    plt.figure(figsize=(10, 7), dpi=300)
+    sns.set_theme(style='whitegrid', context='paper', font_scale=1.4)
+    plt.plot(
+        sorted_df['cumulative_samples_pct'], 
+        sorted_df['cumulative_fires_pct'], 
+        color='#d95f02', 
+        linewidth=3.5, 
+        label='Predictive Risk Model'
+    )
+    
+    plt.plot(
+        [0, 100], [0, 100], 
+        color='gray', 
+        linestyle='--', 
+        linewidth=2, 
+        label='Random Allocation (Baseline)'
+    )
+    
+    key_percentiles = [1, 5, 10, 20, 30]
+    
+    for p in key_percentiles:
+        idx = (sorted_df['cumulative_samples_pct'] - p).abs().idxmin()
+        y_val = sorted_df.loc[idx, 'cumulative_fires_pct']
+        
+        plt.plot(p, y_val, marker='o', markersize=8, color='#1b9e77', zorder=5)
+        plt.text(p + 1, y_val - 3, f'{y_val:.1f}%', color='#0f5e47', fontweight='bold', fontsize=12)
+        
+        plt.vlines(x=p, ymin=0, ymax=y_val, color='#1b9e77', linestyle=':', alpha=0.6)
+        
+    plt.title("Spatial Efficiency of the Boreal Wildfire Forecasting Model\n(Cumulative Gains Analysis)", 
+              fontweight='bold', pad=15)
+    plt.xlabel("Percentage of Landscape Monitored (Highest to Lowest Risk) [%]", labelpad=10)
+    plt.ylabel("Percentage of Actual Wildfire Ignitions Captured [%]", labelpad=10)
+    
+    plt.xlim(0, 40) 
+    plt.ylim(0, 105)
+    
+    plt.legend(loc="lower right", frameon=True, shadow=True, borderpad=1)
+    plt.tight_layout()
+    
+    if output_file:
+        plt.savefig(output_file, bbox_inches='tight')
+        print(f"Chart successfully saved to {output_file}")
+        
+    plt.close()

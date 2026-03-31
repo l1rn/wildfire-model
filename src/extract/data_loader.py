@@ -3,6 +3,8 @@ import rioxarray
 import pandas as pd
 import geopandas as gpd
 import numpy as np
+from shapely.geometry import Point
+
 from src.config import Config
 
 from typing import Optional
@@ -32,9 +34,21 @@ def load_static_raster(path: str) -> Optional[xr.DataArray]:
     except Exception as e:
         print(f"Failed to open TIFF: {e}")
         return None
-        
+
+def load_gee_ndvi(tif_path: str, start_year: int = 2010, end_year: int = 2025):
+    da = rioxarray.open_rasterio(tif_path)
+    da = da.where(da != 9999, np.nan)
+    
+    time_index = pd.date_range(start=f'{start_year}-01-01',
+                               end=f'{end_year}-12-31',
+                               freq='MS')
+    
+    time_index = time_index + pd.offsets.MonthEnd(0)
+    da = da.rename({'band': 'valid_time'})
+    da['valid_time'] = time_index
+    return da
+    
 def load_firms(path: str) -> Optional[gpd.GeoDataFrame]:
-    """Loads FIRMS CSV and converts to a GeoDataFrame"""
     try:
         df = pd.read_csv(path)
         df["acq_date"] = pd.to_datetime(df["acq_date"])
@@ -56,18 +70,36 @@ def load_master_dataset():
     df["valid_time"] = pd.to_datetime(df["valid_time"])
     df['month'] = df['valid_time'].dt.month
     
-    df = df[df['month'].isin(cfg.WILDFIRE_SEASON_MONTHS)]
+    df = df[df['year'].isin(range(2010, 2024))]
+    # df = df[df['month'].isin(cfg.WILDFIRE_SEASON_MONTHS)]
     
     df = df[~df['landcover'].isin(cfg.NON_BURNABLE_CLASSES_LC)]
     return df
 
+def load_russian_fires(filepath: str, use_start_date: bool = True):
+    df = pd.read_csv(filepath, sep=';')  
+    df['date_beginning'] = pd.to_datetime(df['date_beginning'])
+    df['acq_date'] = df['date_beginning']
+    
+    cols = ['geometry', 'acq_date']
+    if 'area_beginning' in df.columns:
+        cols.append('area_beginning')
+    cols.append('area_total')
+    
+    if 'code' in df.columns:
+        df = df.sort_values('date_beginning').groupby('code').first().reset_index()
+        
+    geometry = [Point(xy) for xy in zip(df['longitude'], df['latitude'])]
+    gdf = gpd.GeoDataFrame(df, geometry=geometry, crs='EPSG:4326')
+        
+    return gdf[cols].copy()
+
 def create_new_features(df: pd.DataFrame):
     df["vpd_ghm_interaction"] = df["vpd"] * df["ghm"]
+    df["vpd_cisi_interaction"] = df["vpd"] * df["cisi"]
     df["month"] = df["valid_time"].dt.month
     df["month_sin"] = np.sin(2 * np.pi * df['month'] / 12)
     df["month_cos"] = np.cos(2 * np.pi * df['month'] / 12)
-    df["vpd_infrastructure_interaction"] = df["vpd"] * df["dist_oil_gas"]
-    df["vpd_pop_density_interaction"] = df["vpd"] * df["pop_density"]
     df["vpd_3m_avg"] = (
         df.groupby(['x', 'y'])['vpd']
         .rolling(3, min_periods=1)
@@ -75,21 +107,27 @@ def create_new_features(df: pd.DataFrame):
         .reset_index(level=[0,1], drop=True)
     )
     df["vpd_3m_avg_ghm_interaction"] = df["vpd_3m_avg"] * df["ghm"]
-    df["vpd_3m_avg_infrastructure_interaction"] = df["vpd_3m_avg"] * df["dist_oil_gas"]
     df["temp_ghm_interaction"] = df["temp"] * df["ghm"]
-    df["temp_infrastructure_interaction"] = df["temp"] * df["dist_oil_gas"]
+    df["temp_cisi_interaction"] = df["temp"] * df["cisi"]
     df["temp_precip_interaction"] = df["temp"] * df["precip"]
     df["dew_ghm_interaction"] = df["dew"] * df["ghm"]
-    df["dew_infrastructure_interaction"] = df["dew"] * df["dist_oil_gas"]
+    df["ndvi_ghm_interaction"] = df["ndvi"] * df["ghm"]
+    df["ndvi_vpd_interaction"] = df["ndvi"] * df["vpd"]
+    df['precip_30p_sum'] = (
+        df.groupby(['y', 'x'])['precip']
+        .transform(lambda x: x.rolling(window=30, min_periods=1).sum())
+    )
+    
+    df['wind_slope_synergy'] = df['slope'] * np.sqrt(df['u10']**2 + df['v10']**2)
     return df
-    
 
-def create_lag_features(df: pd.DataFrame):
-    df["vpd_lag1"] = df.groupby(["y", "x"])["vpd"].shift(1)
-    df["temp_lag1"] = df.groupby(["y", "x"])["temp"].shift(1)
-    df["precip_lag1"] = df.groupby(["y", "x"])["precip"].shift(1)
-    df["vpd_ghm_interaction_lag1"] = df["vpd_lag1"] * df["ghm"]
-    
+def create_lag_features(df: pd.DataFrame, lag_vars=['vpd','temp','precip','fire'], lags=1):
+    for var in lag_vars :
+        if var in df.columns:
+            for lag in range(1, lags+1):
+                df[f'{var}_lag{lag}'] = df.groupby(['y', 'x'])[var].shift(lag)
+    if 'vpd_lag1' in df.columns and 'fire_lag1' in df.columns:
+        df["vpd_fire_lag1_interaction"] = df["vpd_lag1"] * df["fire_lag1"]    
     return df
 
 def prepare_features(df: pd.DataFrame):

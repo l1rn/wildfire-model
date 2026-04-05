@@ -43,6 +43,44 @@ def calculate_vpd(t2m_k, d2m_k):
     vpd_pa = es - ea
     return vpd_pa / 100.0
 
+def daily_nesterov(ds, temp_var='t2m', dew_var='d2m', precip_var='tp',
+                   use_dew=True, reset_mm=3.0):
+    tmax = ds[temp_var]
+    if use_dew:
+        tdew = ds[dew_var]
+        increment = tmax * (tmax - tdew)
+    else:
+        tmin = ds[dew_var]
+        increment = tmax * (tmax - tmin)    
+
+    precip = ds[precip_var]
+    reset = precip >= reset_mm
+    
+    def _resetting_cumsum(inc, res):
+        out = np.zeros_like(inc)
+        cur = 0.0
+        for i in range(len(inc)):
+            if res[i]:
+                cur = 0.0
+            else:
+                cur += inc[i]
+            out[i] = cur
+        return out
+    
+    nesterov = xr.apply_ufunc(
+        _resetting_cumsum,
+        increment,
+        reset,
+        input_core_dims=[['valid_time'], ['valid_time']],
+        output_core_dims=[['valid_time']],
+        vectorize=True,         
+        dask='parallelized',
+        output_dtypes=[float]
+    )
+    
+    nesterov.name = 'nesterov_fire_index'
+    return nesterov
+
 def harmonize_fire_records(
     off_df: gpd.GeoDataFrame,
     v_df: gpd.GeoDataFrame,
@@ -94,7 +132,7 @@ def harmonize_fire_records(
     harmonized_gdf = off_proj.to_crs(original_crs)
     return harmonized_gdf
 
-def process_data(target_resolution=0.25, time_agg='monthly', use_area=True, min_area=10):
+def process_data(target_resolution=0.35, time_agg='monthly', use_area=True, min_area=10):
     """ Data Integration with resampling to coarser resolution """
     topo = data_loader.load_static_raster(cfg.raw_dem)
     if topo is None:
@@ -111,30 +149,38 @@ def process_data(target_resolution=0.25, time_agg='monthly', use_area=True, min_
     viirs_firms = data_loader.load_firms("/home/lirn/geo_env/data/raw/fire_archive_modis.csv")
     ndvi = data_loader.load_gee_ndvi("/home/lirn/geo_env/data/raw/khmao_ndvi_monthly_2010_2025.tif")
     lai = data_loader.load_gee_ndvi("/home/lirn/geo_env/data/raw/khmao_lai_monthly_2010_2024.tif", end_year=2024)
+    fpar = data_loader.load_gee_ndvi("/home/lirn/geo_env/data/raw/khmao_fpar_monthly_2010_2024.tif", end_year=2024)
 
     if viirs_firms is not None and not viirs_firms.empty:
         fire_data = harmonize_fire_records(
             off_df=fire_data, 
             v_df=viirs_firms, 
-            spatial_radius_m=5000, 
-            temporal_window_days=7
+            spatial_radius_m=7500, 
+            temporal_window_days=10
         )
+        
+    nesterov_daily = daily_nesterov(ds, temp_var='t2m', dew_var='d2m', 
+        precip_var='tp', use_dew=True, reset_mm=3.0)
+            
     if time_agg == 'monthly':
         climate_freq = '1ME'
         fire_data['period'] = fire_data['acq_date'].dt.to_period('M')
         fire_period_col = 'period'
+        nesterov_agg = nesterov_daily.resample(valid_time='1ME').last()
     elif time_agg == 'quarterly':
         climate_freq = '1QE'
         fire_data['period'] = fire_data['acq_date'].dt.to_period('Q')
         fire_period_col = 'period'
+        nesterov_agg = nesterov_daily.resample(valid_time='1QE').last()
     elif time_agg == 'yearly':
         climate_freq = '1YE'
         fire_data['period'] = fire_data['acq_date'].dt.to_period('Y')
         fire_period_col = 'period'
-        
+        nesterov_agg = nesterov_daily.resample(valid_time='1YE').last()
         
     monthly = ds.resample(valid_time=climate_freq).mean()
-    
+    monthly['nesterov'] = nesterov_agg
+        
     t2m = monthly["t2m"]
     d2m = monthly["d2m"]
     u10 = monthly["u10"]
@@ -182,6 +228,9 @@ def process_data(target_resolution=0.25, time_agg='monthly', use_area=True, min_
     
     v10_coarse = v10.interp(latitude=new_lat, longitude=new_lon, method="linear")
     v10_coarse = v10_coarse.rename({'latitude': 'y', 'longitude': 'x'})
+
+    nesterov_coarse = monthly['nesterov'].interp(latitude=new_lat, longitude=new_lon, method="linear")
+    nesterov_coarse = nesterov_coarse.rename({'latitude': 'y', 'longitude': 'x'})
     
     ndvi_coarse = ndvi.interp(y=new_lat, x=new_lon, method="linear")
     ndvi_coarse = ndvi_coarse.fillna(0)
@@ -190,6 +239,10 @@ def process_data(target_resolution=0.25, time_agg='monthly', use_area=True, min_
     lai_coarse = lai.interp(y=new_lat, x=new_lon, method="linear")
     lai_coarse = lai_coarse.fillna(0)
     lai_coarse.name = "lai"
+    
+    fpar_coarse = fpar.interp(y=new_lat, x=new_lon, method="linear")
+    fpar_coarse = fpar_coarse.fillna(0)
+    fpar_coarse.name = "fpar"
     
     static_stack = {
         "dem": topo.sel(band=1),
@@ -291,7 +344,9 @@ def process_data(target_resolution=0.25, time_agg='monthly', use_area=True, min_
         "v10": v10_coarse,
         "ndvi": ndvi_coarse,
         "lai": lai_coarse,
-        "fire": fire_coarse
+        "fpar": fpar_coarse,
+        "fire": fire_coarse,
+        "nesterov": nesterov_coarse
     }
     
     dataset_dict.update(processed_static)

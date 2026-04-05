@@ -54,7 +54,7 @@ class WildfirePipeline:
     def build_features(self):
         base = [
             "dem", "landcover", "slope", "sm1", 
-            "u10", "v10", "peatland", "ndvi", "lai"
+            "u10", "v10", "peatland", "ndvi", "lai", "fpar"
         ]
 
         if self.use_lag:
@@ -73,7 +73,6 @@ class WildfirePipeline:
             "temp_ghm_interaction",
             "temp_precip_interaction",
             "temp_cisi_interaction",
-            "dew_ghm_interaction",
             "precip_30p_sum",
             "wind_slope_synergy",
         ]
@@ -211,7 +210,7 @@ class WildfirePipeline:
         y_train = train_balanced['fire']
         
         if self.use_smote:
-            smote = SMOTEENN(sampling_strategy=self.smote_ratio, random_state=42)
+            smote = SMOTE(sampling_strategy=self.smote_ratio, random_state=42)
             X_train, y_train = smote.fit_resample(X_train, y_train)
             
         scale_pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
@@ -327,7 +326,7 @@ class WildfirePipeline:
         df = self.load_data()
         self.build_features()
         model, test, optimal_threshold = self.train(df)
-        df_full = df.copy() 
+        df_full = df.copy()
         X_full = df_full[self.features]
 
         probs = model.predict_proba(X_full)[:, 1]
@@ -373,11 +372,11 @@ class WildfirePipeline:
                 output_file=Path(PROCESSED_DIR) / "feature_importance.png" 
             )
         if "Visualize Risk-map" in options:
-            self.visualize(model.base_model, df_full)
+            self.visualize(model, df_full)
         if "SHAP Explanation Bar & Summary" in options:
             tr.explain_model_with_shap(model, test[self.features])
         if "Generate Partial Dependence Plots (PDP)" in options:
-            tr.generate_partial_dependence_plots(model.base_model, test[self.features])
+            tr.generate_partial_dependence_plots(model, test[self.features])
         if "Save the map in TIFF format for QGIS" in options:
             self.save(test)
         if "Create Bivarite Map GHM & VPD" in options:

@@ -193,6 +193,20 @@ class WildfirePipeline:
         best_idx = np.argmax(f1_scores)
         return thresholds[best_idx]
     
+    def balance_test_set(self, test_df, random_state=42):
+        
+        fire = test_df[test_df['fire'] == 1]
+        non_fire = test_df[test_df['fire'] == 0]
+        
+        n_fire = len(fire)
+        if n_fire == 0:
+            print("No fire point in test dataset")
+            return test_df
+        
+        non_fire_balance = non_fire.sample(n=n_fire, random_state=random_state)
+        balanced = pd.concat([fire, non_fire_balance])
+        return balanced.sample(frac=1, random_state=random_state)
+    
     def train(self, df):
         train, val, test  = split.temporal_split(df)       
         
@@ -242,6 +256,10 @@ class WildfirePipeline:
         X_test = test[self.features]
         y_test = test['fire']
 
+        balanced_test_df = self.balance_test_set(test)
+        print("balanced test df")
+        tr.evaluate_model(self.model, balanced_test_df[self.features], balanced_test_df['fire'], self.features)
+        print("normal test df")
         optimal_threshold, test_probs, test_preds = tr.evaluate_model(self.model, X_test, y_test, self.features)
         K = 1000
         top_k_indices = np.argsort(test_probs)[-K:]

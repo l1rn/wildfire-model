@@ -132,7 +132,7 @@ def harmonize_fire_records(
     harmonized_gdf = off_proj.to_crs(original_crs)
     return harmonized_gdf
 
-def process_data(target_resolution=0.35, time_agg='monthly', use_area=True, min_area=10):
+def process_data(target_resolution=0.25, time_agg='monthly', use_area=True, min_area=10):
     """ Data Integration with resampling to coarser resolution """
     topo = data_loader.load_static_raster(cfg.raw_dem)
     if topo is None:
@@ -155,7 +155,7 @@ def process_data(target_resolution=0.35, time_agg='monthly', use_area=True, min_
         fire_data = harmonize_fire_records(
             off_df=fire_data, 
             v_df=viirs_firms, 
-            spatial_radius_m=7500, 
+            spatial_radius_m=5000, 
             temporal_window_days=10
         )
         
@@ -248,11 +248,11 @@ def process_data(target_resolution=0.35, time_agg='monthly', use_area=True, min_
         "dem": topo.sel(band=1),
         "slope": topo.sel(band=2),
         "landcover": lc,
+        "peatland": peat,
         "ghm": ghm,
         "cisi": cisi,
         "pop_density": pop,
         "dist_oil_gas": oil_gas,
-        "peatland": peat
     }
     
     processed_static = {}
@@ -292,10 +292,7 @@ def process_data(target_resolution=0.35, time_agg='monthly', use_area=True, min_
     elif time_agg == 'yearly':
         period_str = 'Y'
     fire_rasters = []
-    def buffer_point(point, area_ha):
-        area_m2 = area_ha * 1000
-        radius = math.sqrt(area_m2 / math.pi)
-        return point.buffer(radius)
+
     
     for time in tqdm(t2m_coarse.valid_time.values, desc="Rasterizing Fire Data"):
         period = pd.to_datetime(time).to_period(period_str)

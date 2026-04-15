@@ -293,7 +293,7 @@ def process_data(target_resolution=0.25, time_agg='monthly', use_area=True, min_
         period_str = 'Y'
     fire_rasters = []
 
-    
+            
     for time in tqdm(t2m_coarse.valid_time.values, desc="Rasterizing Fire Data"):
         period = pd.to_datetime(time).to_period(period_str)
         if period in grouped.groups:

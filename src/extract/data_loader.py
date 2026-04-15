@@ -117,7 +117,6 @@ def create_new_features(df: pd.DataFrame):
         df.groupby(['y', 'x'])['precip']
         .transform(lambda x: x.rolling(window=30, min_periods=1).sum())
     )
-    
     df['wind_slope_synergy'] = df['slope'] * np.sqrt(df['u10']**2 + df['v10']**2)
     return df
 

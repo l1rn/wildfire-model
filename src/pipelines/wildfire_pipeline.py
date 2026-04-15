@@ -2,7 +2,10 @@ from src.extract import data_loader, split
 from src.output import train as tr
 from src.output import maps
 from src.config import Config, PROCESSED_DIR
- 
+
+import optuna
+from optuna.samplers import TPESampler
+
 from pathlib import Path
 import pandas as pd
 import questionary
@@ -95,96 +98,55 @@ class WildfirePipeline:
         else: 
             self.features = all_candidates
             
-    def tuning(self, scale_pos_weight, X_train, X_val, y_train, y_val, model):
-        if model == "xgb":
-            base_model = XGBClassifier(scale_pos_weight=scale_pos_weight, 
-                                        random_state=42, eval_metrics='logloss')
-                
-            param_grid = {
-                'n_estimators': [100, 300, 500],
-                'max_depth': [3, 5, 7, 10],
-                'learning_rate': [0.01, 0.05, 0.1],
-                'subsample': [0.6, 0.8, 1.0],
-                'colsample_bytree': [0.6, 0.8, 1.0],
-                'min_child_weight': [1, 3, 5],
-                'reg_lambda': [0.1, 1, 10],
-                'reg_alpha': [0, 0.1, 1],
+    def tuning(self, scale_pos_weight, X_train, X_val, y_train, y_val, model_type):
+        def objective(trial):    
+            params = {
+                'n_estimators': trial.suggest_int('n_estimators', 50, 500),
+                'max_depth': trial.suggest_int('max_depth', 3, 15),
+                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
+                'subsample': trial.suggest_float('subsample', 0.6, 1.0),
+                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
+                'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
+                'gamma': trial.suggest_float('float', 0, 5),
+                'scale_pos_weight': scale_pos_weight,
+                'eval_metric': 'logloss',
+                'random_state': 42,
+                'verbosity': 0,                    
             }
+            if model_type == "xgb":
+                model = XGBClassifier(**params)
+            elif model_type == "lgbm":
+                model = LGBMClassifier(**params)
+            else:
+                raise ValueError("Unsupported model type")
             
-            X_combined =  pd.concat([X_train, X_val])
-            y_combined = pd.concat([y_train, y_val])
-            test_fold = np.array([-1]*len(X_train) + [0]*len(X_val))
-            ps = PredefinedSplit(test_fold)
-            
-            f2_scorer = make_scorer(fbeta_score, beta=2.0)
-            random_search = RandomizedSearchCV (
-                estimator=base_model,
-                param_distributions=param_grid,
-                cv = ps, 
-                scoring=f2_scorer,
-                n_jobs=-1,
-                verbose=1,
-                random_state=cfg.RANDOM_SEED
-            )
-            
-            random_search.fit(X_combined, y_combined)
-            print("Best parameters:", random_search.best_params_)
-            best_params = random_search.best_params_                
-            import json
-            with open(cfg.xgboost_params, 'w') as f:
-                json.dump(best_params, f)
-            
-            self.model = XGBClassifier(
-                **best_params,
-                scale_pos_weight=scale_pos_weight,
-                random_state=42,
-                eval_metric='logloss'
-            )
-        elif model == "lgbm":
-            base_model = LGBMClassifier(
-                scale_pos_weight=scale_pos_weight,
-                random_state=42,
-                verbosity=-1
-            )
-            
-            param_grid = {
-                'n_estimators': [100, 300, 500],
-                'learning_rate': [0.01, 0.05, 0.1],
-                'num_leaves': [31, 50, 100],
-                'subsample': [0.6, 0.8, 1.0],
-                'colsample_bytree': [0.6, 0.8, 1.0],
-                'min_child_weight': [1, 3, 5],
-                'reg_lambda': [0.1, 1, 10],
-                'reg_alpha': [0, 0.1, 1],
-            }
-            
-            X_combined =  pd.concat([X_train, X_val])
-            y_combined = pd.concat([y_train, y_val])
-            test_fold = np.array([-1]*len(X_train) + [0]*len(X_val))
-            ps = PredefinedSplit(test_fold)
-            
-            random_search = RandomizedSearchCV (
-                estimator=base_model,
-                param_distributions=param_grid,
-                cv = ps, 
-                scoring='average_precision',
-                n_jobs=-1,
-                verbose=1,
-                random_state=cfg.RANDOM_SEED
-            )
-            random_search.fit(X_combined, y_combined)
-            best_params = random_search.best_params_
-            print("Best LightGBM params:", best_params)
-            import json
-            with open(cfg.lightgbm_params, 'w') as f:
-                json.dump(best_params, f)
-            
-            self.model = XGBClassifier(
-                **best_params,
-                scale_pos_weight=scale_pos_weight,
-                random_state=42,
-                eval_metric='logloss'
-            )
+            model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
+            y_pred_probs = model.predict_proba(X_val)[:, 1]
+            f1 = f1_score(y_val, y_pred_probs > 0.5)
+            return f1
+        
+        study = optuna.create_study(direction='maximize', sampler=TPESampler(seed=42))
+        study.optimize(objective, n_trials=50, show_progress_bar=True)
+        
+        best_params = study.best_params
+        print(f"Best F1: {study.best_value:.4f}")
+        print(f"Best params: {best_params}")
+
+        import json
+        if model_type == "xgb":
+            best_params['scale_pos_weight'] = scale_pos_weight
+            best_params['random_state'] = 42
+            best_params['verbosity'] = 0
+            self.model = XGBClassifier(**best_params)
+            with open(Path(PROCESSED_DIR) / "best_xgboost_params.json") as f:
+                json.dump(study.best_params, f)
+        elif model_type == "lgbm":
+            best_params['scale_pos_weight'] = scale_pos_weight
+            best_params['random_state'] = 42
+            best_params['verbosity'] = -1
+            self.model = LGBMClassifier(**best_params)  
+            with open(Path(PROCESSED_DIR) / "best_lightgbm_params.json") as f:
+                json.dump(study.best_params, f)  
         
     def find_optimal_threshold(self, model, X_val, y_val):
         probs = model.predict_proba(X_val)[:, 1]

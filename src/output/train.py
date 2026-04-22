@@ -46,6 +46,7 @@ def generate_evaluation_artifacts(
     
     print("Logistic Regression Baseline Classification Report:")
     print(classification_report(y_test, baseline_preds))
+    print()
     
     print("\n=== GENERATING VISUAL ARTIFACTS ===")
     if primary_probs is None:
@@ -210,10 +211,10 @@ def evaluate_model(model, X, y, features, threshold=None):
     probs = model.predict_proba(X)[:, 1]
     if threshold is None:
         precisions, recalls, thresholds = precision_recall_curve(y, probs)
-        f1_scores = 2 * (precisions[:-1] * recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-12)
+        f1_scores = 2 * (precisions[:-1] * recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-9)
         best_idx = np.argmax(f1_scores)
         threshold = thresholds[best_idx]
-        print(f"\nOptimal Probability Threshold (Max F1): {threshold:.4f}")
+        print(f"\nOptimal Probability Threshold (Max F1): {threshold:.4f} ({f1_scores[best_idx]})")
     preds = (probs >= threshold).astype(int)
 
     print(classification_report(y, preds))

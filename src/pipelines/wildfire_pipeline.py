@@ -18,7 +18,8 @@ from sklearn.metrics import (
     recall_score,
     accuracy_score,
     fbeta_score,
-    make_scorer
+    make_scorer,
+    matthews_corrcoef
 )
 
 from sklearn.model_selection import RandomizedSearchCV, PredefinedSplit
@@ -78,6 +79,8 @@ class WildfirePipeline:
             "temp_cisi_interaction",
             "precip_30p_sum",
             "wind_slope_synergy",
+            "ndvi_vpd_interaction",
+            "dew_ghm_interaction",
         ]
 
         anthropogenic = [
@@ -107,7 +110,7 @@ class WildfirePipeline:
                 'subsample': trial.suggest_float('subsample', 0.6, 1.0),
                 'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
                 'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
-                'gamma': trial.suggest_float('float', 0, 5),
+                'gamma': trial.suggest_float('gamma', 0, 5),
                 'scale_pos_weight': scale_pos_weight,
                 'eval_metric': 'logloss',
                 'random_state': 42,
@@ -121,9 +124,13 @@ class WildfirePipeline:
                 raise ValueError("Unsupported model type")
             
             model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
-            y_pred_probs = model.predict_proba(X_val)[:, 1]
-            f1 = f1_score(y_val, y_pred_probs > 0.5)
-            return f1
+            y_val_proba = model.predict_proba(X_val)[:, 1]
+            precisions, recalls, thresholds = precision_recall_curve(y_val, y_val_proba)
+            f1_scores = 2 * (precisions[:-1] * recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-9)
+            best_idx = np.argmax(f1_scores)
+            best_threshold = thresholds[best_idx]
+            best_f1 = f1_scores[best_idx]
+            return best_f1
         
         study = optuna.create_study(direction='maximize', sampler=TPESampler(seed=42))
         study.optimize(objective, n_trials=50, show_progress_bar=True)
@@ -138,22 +145,16 @@ class WildfirePipeline:
             best_params['random_state'] = 42
             best_params['verbosity'] = 0
             self.model = XGBClassifier(**best_params)
-            with open(Path(PROCESSED_DIR) / "best_xgboost_params.json") as f:
+            with open(Path(PROCESSED_DIR) / "best_xgboost_params.json", 'w') as f:
                 json.dump(study.best_params, f)
         elif model_type == "lgbm":
             best_params['scale_pos_weight'] = scale_pos_weight
             best_params['random_state'] = 42
             best_params['verbosity'] = -1
             self.model = LGBMClassifier(**best_params)  
-            with open(Path(PROCESSED_DIR) / "best_lightgbm_params.json") as f:
+            with open(Path(PROCESSED_DIR) / "best_lightgbm_params.json", 'w') as f:
                 json.dump(study.best_params, f)  
-        
-    def find_optimal_threshold(self, model, X_val, y_val):
-        probs = model.predict_proba(X_val)[:, 1]
-        precisions, recalls, thresholds = precision_recall_curve(y_val, probs)
-        f1_scores = 2 * (precisions[:-1] * recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-12)
-        best_idx = np.argmax(f1_scores)
-        return thresholds[best_idx]
+ 
     
     def balance_test_set(self, test_df, random_state=42):
         
@@ -236,8 +237,6 @@ class WildfirePipeline:
             X_test=X_test,
             y_test=y_test,
             optimal_threshold=optimal_threshold,
-            primary_probs=test_probs,          
-            primary_preds=test_preds
         )
     
         test_full = test.copy()
@@ -252,6 +251,7 @@ class WildfirePipeline:
             "threshold": optimal_threshold,
             "accuracy": accuracy_score(y_test, test_preds),
             "f2": fbeta_score(y_test, test_preds, beta=2),
+            "mcc": matthews_corrcoef(y_test, test_preds)
         }
         return self.model, test_full, optimal_threshold
     

@@ -97,6 +97,8 @@ def load_russian_fires(filepath: str, use_start_date: bool = True):
 def create_new_features(df: pd.DataFrame):
     df["vpd_ghm_interaction"] = df["vpd"] * df["ghm"]
     df["vpd_cisi_interaction"] = df["vpd"] * df["cisi"]
+    df["vpd_oil_interaction"] = df["vpd"] * df["dist_oil_gas"]
+    
     df["month"] = df["valid_time"].dt.month
     df["month_sin"] = np.sin(2 * np.pi * df['month'] / 12)
     df["month_cos"] = np.cos(2 * np.pi * df['month'] / 12)

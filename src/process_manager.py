@@ -106,8 +106,8 @@ def wildfire_pipeline():
                 params=best_params,
                 feature_group=group,
                 downsample_ratio=10,
-                use_smote=True,
-                smote_ratio=0.2,
+                # use_smote=True,
+                # smote_ratio=0.2,
             )
         else:
             pipeline = WildfirePipeline(

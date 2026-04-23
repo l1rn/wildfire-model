@@ -13,13 +13,6 @@ from sklearn.metrics import (
     precision_recall_curve, 
     roc_auc_score, 
     classification_report, 
-    precision_score,
-    f1_score,
-    recall_score,
-    accuracy_score,
-    fbeta_score,
-    make_scorer,
-    matthews_corrcoef
 )
 
 from sklearn.model_selection import RandomizedSearchCV, PredefinedSplit
@@ -154,7 +147,44 @@ class WildfirePipeline:
             self.model = LGBMClassifier(**best_params)  
             with open(Path(PROCESSED_DIR) / "best_lightgbm_params.json", 'w') as f:
                 json.dump(study.best_params, f)  
- 
+
+    def evaluation_every_model(self, test, X_train, y_train, K=1000):
+        print("normal test df")
+        
+        X_test = test[self.features]
+        y_test = test['fire']
+        
+        optimal_threshold, test_probs, test_preds = tr.evaluate_model(self.model, X_test, y_test, self.features)
+        baseline_preds, baseline_probs = tr.evaluate_logistic_regression(
+            X_train=X_train, 
+            y_train=y_train, 
+            X_test=X_test, 
+            optimal_threshold=optimal_threshold
+        )
+        precision_at_k = tr.calculate_p_at_k(K=K, y_test=y_test, test_probs=test_probs)
+
+        self.metrics = {
+            "xgboost": tr.generate_metrics_model(y_test, test_preds, test_probs, optimal_threshold),
+            "logistic_regression": tr.generate_metrics_model(y_test, baseline_preds, baseline_probs, optimal_threshold),
+            "rf": {}
+        }
+
+        ans = questionary.confirm("Generate Evaluation Artifacts?").ask()
+        if ans:
+            tr.generate_evaluation_artifacts(
+                y_test=y_test,
+                optimal_threshold=optimal_threshold,
+                primary_probs=test_probs,
+                primary_preds=test_preds,
+                baseline_preds=baseline_preds,
+                baseline_probs=baseline_probs
+            )
+        
+        balanced_test_df = self.balance_test_set(test)
+        print("balanced test df")
+        tr.evaluate_model(self.model, balanced_test_df[self.features], balanced_test_df['fire'], self.features)
+
+        return test_probs
     
     def balance_test_set(self, test_df, random_state=42):
         
@@ -214,46 +244,17 @@ class WildfirePipeline:
                 self.model = LGBMClassifier(**model_params)
         else:
             self.model = self.model_factory()
-        self.model.fit(X_train, y_train)
-        
-        X_test = test[self.features]
-        y_test = test['fire']
 
-        balanced_test_df = self.balance_test_set(test)
-        print("balanced test df")
-        tr.evaluate_model(self.model, balanced_test_df[self.features], balanced_test_df['fire'], self.features)
-        print("normal test df")
-        optimal_threshold, test_probs, test_preds = tr.evaluate_model(self.model, X_test, y_test, self.features)
+        self.model.fit(X_train, y_train)
         K = 1000
-        top_k_indices = np.argsort(test_probs)[-K:]
+        test_probs = self.evaluation_every_model(test=test, X_train=X_train, y_train=y_train, K=K)
         
-        actual_fires_in_top_k = y_test.iloc[top_k_indices].sum()
-        precision_at_k = actual_fires_in_top_k / K
         # self._evaluate_by_year_type(test, test_probs, optimal_threshold)
-        tr.generate_evaluation_artifacts(
-            model=self.model,
-            X_train=X_train,
-            y_train=y_train,
-            X_test=X_test,
-            y_test=y_test,
-            optimal_threshold=optimal_threshold,
-        )
     
         test_full = test.copy()
         test_full["fire_probability"] = test_probs
         
-        self.metrics = {
-            "precision": precision_score(y_test, test_preds),
-            "recall": recall_score(y_test, test_preds),
-            "f1": f1_score(y_test, test_preds),
-            f"p@{K}": precision_at_k,            
-            "roc_auc": roc_auc_score(y_test, test_probs),
-            "threshold": optimal_threshold,
-            "accuracy": accuracy_score(y_test, test_preds),
-            "f2": fbeta_score(y_test, test_preds, beta=2),
-            "mcc": matthews_corrcoef(y_test, test_preds)
-        }
-        return self.model, test_full, optimal_threshold
+        return self.model, test_full
     
     def _evaluate_by_year_type(self, test_df, probs, threshold):
         extreme = test_df[test_df['is_extreme_year'] == 1]
@@ -300,12 +301,29 @@ class WildfirePipeline:
         )
         
     def get_metrics(self):
-        return self.metrics
+        if not self.metrics:
+            return pd.DataFrame()
+        
+        records = []
+        for model_name, model_metrics in self.metrics.items():
+            if model_metrics and isinstance(model_metrics, dict):
+                record = {'model': model_name}
+                record.update(model_metrics)
+                records.append(record)
+        if not records:
+            return pd.DataFrame()
+        
+        df = pd.DataFrame(records)
+        df.set_index('model', inplace=True)
+
+        numeric_cols = df.select_dtypes(include=['float64', 'float32']).columns
+        df[numeric_cols] = df[numeric_cols].round(4)
+        return df
                 
     def run(self):
         df = self.load_data()
         self.build_features()
-        model, test, optimal_threshold = self.train(df)
+        model, test = self.train(df)
         df_full = df.copy()
         X_full = df_full[self.features]
 

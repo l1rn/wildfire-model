@@ -121,7 +121,7 @@ def wildfire_pipeline():
         pipeline.run()
         results[group] = pipeline.get_metrics()
     
-    df_table = pd.DataFrame(results).T
+    df_table = pd.concat(results, axis=0)
     
     print(df_table)
 

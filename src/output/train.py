@@ -8,6 +8,13 @@ from sklearn.metrics import (
     precision_recall_curve,
     PrecisionRecallDisplay,
     ConfusionMatrixDisplay,
+    precision_score,
+    f1_score,
+    recall_score,
+    accuracy_score,
+    fbeta_score,
+    make_scorer,
+    matthews_corrcoef
 )
 from sklearn.linear_model import LogisticRegression
 from sklearn.inspection import PartialDependenceDisplay
@@ -23,37 +30,43 @@ import matplotlib.colors as colors
 
 cfg = Config()
 
+def generate_metrics_model(y_test, preds, probs, threshold):
+    return {
+        "precision": precision_score(y_test, preds),
+        "recall": recall_score(y_test, preds),
+        "f1": f1_score(y_test, preds),
+        "roc_auc": roc_auc_score(y_test, probs),
+        "threshold": threshold,
+        "accuracy": accuracy_score(y_test, preds),
+        "f2": fbeta_score(y_test, preds, beta=2),
+        "mcc": matthews_corrcoef(y_test, preds)
+    }
+
+def evaluate_logistic_regression(X_train, y_train, X_test, optimal_threshold):
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    baseline_model = LogisticRegression(
+        class_weight='balanced', 
+        max_iter=2000, 
+        random_state=42, 
+        solver='lbfgs'
+    )
+    baseline_model.fit(X_train_scaled, y_train)
+        
+    baseline_probs = baseline_model.predict_proba(X_test_scaled)[:, 1]
+    baseline_preds = (baseline_probs >= optimal_threshold).astype(int)
+    return baseline_preds, baseline_probs
+
 def generate_evaluation_artifacts(
-    model,
-    X_train,
-    y_train,
-    X_test,
     y_test,
     optimal_threshold,
     primary_probs=None,
-    primary_preds=None
+    primary_preds=None,
+    baseline_preds=None,
+    baseline_probs=None,
 ):
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.fit_transform(X_test)
-    baseline_model = LogisticRegression(
-        class_weight='balanced', max_iter=2000, random_state=42,solver='lbfgs'
-    )
-    baseline_model.fit(X_train_scaled, y_train)
-    
-    baseline_probs = baseline_model.predict_proba(X_test_scaled)[:, 1]
-    baseline_preds = (baseline_probs >= 0.5).astype(int)
-    
-    print("Logistic Regression Baseline Classification Report:")
-    print(classification_report(y_test, baseline_preds))
-    print()
-    
     print("\n=== GENERATING VISUAL ARTIFACTS ===")
-    if primary_probs is None:
-        primary_probs = model.predict_proba(X_test)[:, 1]
-    if primary_preds is None:
-        primary_preds = (primary_probs >= optimal_threshold).astype(int)
-    
     fig, ax = plt.subplots(1, 2, figsize=(14, 6), facecolor='white')
     
     ConfusionMatrixDisplay.from_predictions(
@@ -84,7 +97,7 @@ def generate_evaluation_artifacts(
     plt.tight_layout()
     output_filename = Path(PROCESSED_DIR) / "evaluation_artifacts.png"
     plt.savefig(output_filename, dpi=300)
-    
+
 def generate_spatial_reliability_map(
     original_df, resolution=0.05, n_classes=4
 ):  
@@ -219,7 +232,17 @@ def evaluate_model(model, X, y, features, threshold=None):
 
     print(classification_report(y, preds))
     print(f"ROC-AUC: {roc_auc_score(y, probs):.4f}")
-
+    metrics = {
+        "precision": precision_score(y, preds),
+        "recall": recall_score(y, preds),
+        "f1": f1_score(y, preds),
+        "roc_auc": roc_auc_score(y, probs),
+        "threshold": threshold,
+        "accuracy": accuracy_score(y, preds),
+        "f2": fbeta_score(y, preds, beta=2),
+        "mcc": matthews_corrcoef(y, preds)
+    }
+    print(metrics)
     if hasattr(model, 'feature_importances_'):
         importance = pd.Series(model.feature_importances_, index=features).sort_values(ascending=False)
         print(importance)
@@ -256,6 +279,13 @@ def evaluate_risk_percentiles(
         })
     evaluation_table = pd.DataFrame(results)
     return evaluation_table
+
+def calculate_p_at_k(K = 1000, test_probs=None, y_test=None):
+    top_k_indices = np.argsort(test_probs)[-K:]
+    
+    actual_fires_in_top_k = y_test.iloc[top_k_indices].sum()
+    precision_at_k = actual_fires_in_top_k / K
+    return precision_at_k
 
 def explain_model_with_shap(model, X_test):
     if hasattr(model, "best_estimator_"):

@@ -138,14 +138,14 @@ class WildfirePipeline:
             best_params['random_state'] = 42
             best_params['verbosity'] = 0
             self.model = XGBClassifier(**best_params)
-            with open(Path(PROCESSED_DIR) / "best_xgboost_params.json") as f:
+            with open(Path(PROCESSED_DIR) / "best_xgboost_params.json", "w") as f:
                 json.dump(study.best_params, f)
         elif model_type == "lgbm":
             best_params['scale_pos_weight'] = scale_pos_weight
             best_params['random_state'] = 42
             best_params['verbosity'] = -1
             self.model = LGBMClassifier(**best_params)  
-            with open(Path(PROCESSED_DIR) / "best_lightgbm_params.json") as f:
+            with open(Path(PROCESSED_DIR) / "best_lightgbm_params.json", "w") as f:
                 json.dump(study.best_params, f)  
         
     def find_optimal_threshold(self, model, X_val, y_val):

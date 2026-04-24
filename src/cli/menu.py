@@ -3,9 +3,8 @@ from src.models import models
 def choose_model():
     model_options = {
         1: ("XGBoost", models.get_xgboost),
-        2: ("Random Forest", models.get_random_forest),
-        3: ("Random Forest Search", models.get_random_forest_search),
-        4: ("LightGBM", models.lightgbm_factory)
+        2: ("RF", models.get_random_forest),
+        3: ("LightGBM", models.lightgbm_factory)
     }
     print("\nChoose the model to execute:\n")
     for key, (name, _) in model_options.items():

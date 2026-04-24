@@ -2,9 +2,7 @@ from src.extract import data_loader, split
 from src.output import train as tr
 from src.output import maps
 from src.config import Config, PROCESSED_DIR
-
-import optuna
-from optuna.samplers import TPESampler
+from src.models import models as mod
 
 from pathlib import Path
 import pandas as pd
@@ -15,12 +13,10 @@ from sklearn.metrics import (
     classification_report, 
 )
 
-from sklearn.model_selection import RandomizedSearchCV, PredefinedSplit
 from imblearn.over_sampling import SMOTE
-from imblearn.combine import SMOTEENN
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
-import numpy as np
+from sklearn.ensemble import RandomForestClassifier
 
 cfg = Config()
 class WildfirePipeline:
@@ -93,60 +89,6 @@ class WildfirePipeline:
             self.features = [f for f in all_candidates if f in {"dist_oil_gas", "pop_density", "ghm"}]
         else: 
             self.features = all_candidates
-            
-    def tuning(self, scale_pos_weight, X_train, X_val, y_train, y_val, model_type):
-        def objective(trial):    
-            params = {
-                'n_estimators': trial.suggest_int('n_estimators', 50, 500),
-                'max_depth': trial.suggest_int('max_depth', 3, 15),
-                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-                'subsample': trial.suggest_float('subsample', 0.6, 1.0),
-                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
-                'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
-                'gamma': trial.suggest_float('gamma', 0, 5),
-                'scale_pos_weight': scale_pos_weight,
-                'eval_metric': 'logloss',
-                'random_state': 42,
-                'verbosity': 0,                    
-            }
-            if model_type == "xgb":
-                model = XGBClassifier(**params)
-            elif model_type == "lgbm":
-                model = LGBMClassifier(**params)
-            else:
-                raise ValueError("Unsupported model type")
-            
-            model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
-            y_val_proba = model.predict_proba(X_val)[:, 1]
-            precisions, recalls, thresholds = precision_recall_curve(y_val, y_val_proba)
-            f1_scores = 2 * (precisions[:-1] * recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-9)
-            best_idx = np.argmax(f1_scores)
-            best_threshold = thresholds[best_idx]
-            best_f1 = f1_scores[best_idx]
-            return best_f1
-        
-        study = optuna.create_study(direction='maximize', sampler=TPESampler(seed=42))
-        study.optimize(objective, n_trials=50, show_progress_bar=True)
-        
-        best_params = study.best_params
-        print(f"Best F1: {study.best_value:.4f}")
-        print(f"Best params: {best_params}")
-
-        import json
-        if model_type == "xgb":
-            best_params['scale_pos_weight'] = scale_pos_weight
-            best_params['random_state'] = 42
-            best_params['verbosity'] = 0
-            self.model = XGBClassifier(**best_params)
-            with open(Path(PROCESSED_DIR) / "best_xgboost_params.json", 'w') as f:
-                json.dump(study.best_params, f)
-        elif model_type == "lgbm":
-            best_params['scale_pos_weight'] = scale_pos_weight
-            best_params['random_state'] = 42
-            best_params['verbosity'] = -1
-            self.model = LGBMClassifier(**best_params)  
-            with open(Path(PROCESSED_DIR) / "best_lightgbm_params.json", 'w') as f:
-                json.dump(study.best_params, f)  
 
     def evaluation_every_model(self, test, X_train, y_train, K=1000):
         print("normal test df")
@@ -155,17 +97,17 @@ class WildfirePipeline:
         y_test = test['fire']
         
         optimal_threshold, test_probs, test_preds = tr.evaluate_model(self.model, X_test, y_test, self.features)
-        baseline_preds, baseline_probs = tr.evaluate_logistic_regression(
-            X_train=X_train, 
-            y_train=y_train, 
-            X_test=X_test, 
-            optimal_threshold=optimal_threshold
-        )
+        baseline_preds, baseline_probs, baseline_optimal_threshold = tr.\
+            evaluate_logistic_regression(X_train=X_train, y_train=y_train, X_test=X_test, y_test=y_test)
+
         precision_at_k = tr.calculate_p_at_k(K=K, y_test=y_test, test_probs=test_probs)
+        base_precision_at_k = tr.calculate_p_at_k(K=K, y_test=y_test, test_probs=baseline_probs)
 
         self.metrics = {
-            "xgboost": tr.generate_metrics_model(y_test, test_preds, test_probs, optimal_threshold),
-            "logistic_regression": tr.generate_metrics_model(y_test, baseline_preds, baseline_probs, optimal_threshold),
+            "xgboost": tr.\
+                generate_metrics_model(y_test, test_preds, test_probs, optimal_threshold, K, precision_at_k),
+            "logistic_regression": tr.\
+                generate_metrics_model(y_test, baseline_preds, baseline_probs, baseline_optimal_threshold, K, base_precision_at_k),
             "rf": {}
         }
 
@@ -179,15 +121,28 @@ class WildfirePipeline:
                 baseline_preds=baseline_preds,
                 baseline_probs=baseline_probs
             )
-        
-        balanced_test_df = self.balance_test_set(test)
-        print("balanced test df")
-        tr.evaluate_model(self.model, balanced_test_df[self.features], balanced_test_df['fire'], self.features)
 
+        balanced_test_df = self.balance_test_set(test)
+        
+        balanced_X_test = balanced_test_df[self.features]
+        balanced_y_test = balanced_test_df['fire']
+
+        optimal_threshold, balanced_probs, balanced_preds  = tr.evaluate_model(self.model, balanced_X_test, balanced_y_test, self.features)
+        balanced_baseline_preds, balanced_baseline_probs, balanced_baseline_optimal_threshold = tr.\
+                    evaluate_logistic_regression(X_train=X_train, y_train=y_train, X_test=balanced_X_test, y_test=balanced_y_test)
+       
+        balanced_precision_at_k = tr.calculate_p_at_k(K=K, y_test=balanced_y_test, test_probs=balanced_probs)
+        balanced_baseline_precision_at_k = tr.calculate_p_at_k(K=K, y_test=balanced_y_test, test_probs=balanced_baseline_probs)
+        self.balanced_metrics = {
+            "xgboost": tr.\
+                generate_metrics_model(balanced_y_test, balanced_preds, balanced_probs, optimal_threshold, K, balanced_precision_at_k),
+            "logistic_regression": tr.\
+                generate_metrics_model(balanced_y_test, balanced_baseline_preds, balanced_baseline_probs, balanced_baseline_optimal_threshold, K, balanced_baseline_precision_at_k)
+        }
         return test_probs
     
     def balance_test_set(self, test_df, random_state=42):
-        
+
         fire = test_df[test_df['fire'] == 1]
         non_fire = test_df[test_df['fire'] == 0]
         
@@ -226,7 +181,7 @@ class WildfirePipeline:
         y_val = val["fire"]
         if "xgboost" in self.model_factory.__name__:
             if self.tune:
-                self.tuning(scale_pos_weight, X_train, X_val, y_train, y_val, "xgb")
+                self.model = mod.tuning(scale_pos_weight, X_val, y_val, model_type="xgb")
             else:
                 model_params = self.params.copy()
                 model_params['scale_pos_weight'] = scale_pos_weight
@@ -235,13 +190,21 @@ class WildfirePipeline:
                 self.model = XGBClassifier(**model_params)
         elif "lightgbm" in self.model_factory.__name__:
             if self.tune:
-                self.tuning(scale_pos_weight, X_train, X_val, y_train, y_val, "lgbm")
+                self.model = mod.tuning(scale_pos_weight, X_val, y_val, model_type="lgbm",)
             else:
                 model_params = self.params.copy()
                 model_params['scale_pos_weight'] = scale_pos_weight
                 model_params['random_state'] = 42
                 model_params['verbosity'] = -1
                 self.model = LGBMClassifier(**model_params)
+        elif "rf" in self.model_factory.__name__:
+            if self.tune:
+                self.model = mod.tuning(scale_pos_weight, X_val, y_val, "rf")
+            else:
+                model_params['class_weight'] = 'balanced'
+                model_params['random_state'] = 42
+                model_params['n_jobs'] = -1
+                self.model = RandomForestClassifier(**model_params)
         else:
             self.model = self.model_factory()
 
@@ -300,12 +263,19 @@ class WildfirePipeline:
             filename="khmao.tif"
         )
         
-    def get_metrics(self):
+    def get_metrics(self, parameter="imbalanced"):
+        if parameter == "imbalanced":
+            metrics_data = self.metrics
+        elif parameter == "balanced":
+            metrics_data = self.balanced_metrics
+        else:
+            metrics_data = self.metrics
+        
         if not self.metrics:
             return pd.DataFrame()
         
         records = []
-        for model_name, model_metrics in self.metrics.items():
+        for model_name, model_metrics in metrics_data.items():
             if model_metrics and isinstance(model_metrics, dict):
                 record = {'model': model_name}
                 record.update(model_metrics)

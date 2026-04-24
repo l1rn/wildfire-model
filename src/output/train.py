@@ -30,19 +30,20 @@ import matplotlib.colors as colors
 
 cfg = Config()
 
-def generate_metrics_model(y_test, preds, probs, threshold):
+def generate_metrics_model(y_test, preds, probs, threshold, K, k):
     return {
         "precision": precision_score(y_test, preds),
         "recall": recall_score(y_test, preds),
         "f1": f1_score(y_test, preds),
         "roc_auc": roc_auc_score(y_test, probs),
         "threshold": threshold,
+        "p@{K}": k,
         "accuracy": accuracy_score(y_test, preds),
         "f2": fbeta_score(y_test, preds, beta=2),
         "mcc": matthews_corrcoef(y_test, preds)
     }
 
-def evaluate_logistic_regression(X_train, y_train, X_test, optimal_threshold):
+def evaluate_logistic_regression(X_train, y_train, X_test, y_test, optimal_threshold=None):
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
@@ -55,8 +56,14 @@ def evaluate_logistic_regression(X_train, y_train, X_test, optimal_threshold):
     baseline_model.fit(X_train_scaled, y_train)
         
     baseline_probs = baseline_model.predict_proba(X_test_scaled)[:, 1]
+    if optimal_threshold is None:
+        precisions, recalls, thresholds = precision_recall_curve(y_test, baseline_probs)
+        f1_scores = 2 * (precisions[:-1] * recalls[:-1]) / (precisions[:-1] + recalls[:-1] + 1e-9)
+        best_idx = np.argmax(f1_scores)
+        optimal_threshold = thresholds[best_idx]
+
     baseline_preds = (baseline_probs >= optimal_threshold).astype(int)
-    return baseline_preds, baseline_probs
+    return baseline_preds, baseline_probs, optimal_threshold
 
 def generate_evaluation_artifacts(
     y_test,
@@ -232,17 +239,7 @@ def evaluate_model(model, X, y, features, threshold=None):
 
     print(classification_report(y, preds))
     print(f"ROC-AUC: {roc_auc_score(y, probs):.4f}")
-    metrics = {
-        "precision": precision_score(y, preds),
-        "recall": recall_score(y, preds),
-        "f1": f1_score(y, preds),
-        "roc_auc": roc_auc_score(y, probs),
-        "threshold": threshold,
-        "accuracy": accuracy_score(y, preds),
-        "f2": fbeta_score(y, preds, beta=2),
-        "mcc": matthews_corrcoef(y, preds)
-    }
-    print(metrics)
+    
     if hasattr(model, 'feature_importances_'):
         importance = pd.Series(model.feature_importances_, index=features).sort_values(ascending=False)
         print(importance)

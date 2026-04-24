@@ -11,6 +11,7 @@ import pandas as pd
 import src.preprocessing as preprocessing
 import src.output.data_analysis as da
 from src.output.maps import plot_historical_fires, plot_landcover_map
+import questionary
 
 collection = GeeExtractor()
 cfg = Config()
@@ -87,8 +88,8 @@ def summarize_cv():
     )
 
 def wildfire_pipeline():
-    model_name, factory = menu.choose_model()
-    use_lag = int(input("Use lag features(yes - 1 / no - 0): "))
+    name, factory = menu.choose_model()
+    use_lag = questionary.confirm("Use lag variables in data model").ask()
     groups = ["all", 
             #   "natural", "anthropogenic", "compounding"
               ]
@@ -102,7 +103,7 @@ def wildfire_pipeline():
             pipeline = WildfirePipeline(
                 factory, 
                 use_lag=use_lag, 
-                tune=False, 
+                tune=True, 
                 params=best_params,
                 feature_group=group,
                 downsample_ratio=10,
@@ -119,7 +120,14 @@ def wildfire_pipeline():
                 smote_ratio=0.5
             ) 
         pipeline.run()
-        results[group] = pipeline.get_metrics()
+        metrics_ans = questionary.checkbox("which metrics to execute?", choices=[
+            "imbalanced test set",
+            "balanced test set"
+        ]).ask()
+        if metrics_ans == "imbalanced test set":
+            results[group] = pipeline.get_metrics(parameter="imbalanced")
+        elif metrics_ans == "balanced test set":
+            results[group] = pipeline.get_metrics(parameter="balanced")
     
     df_table = pd.concat(results, axis=0)
     

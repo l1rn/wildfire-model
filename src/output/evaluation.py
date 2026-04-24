@@ -2,8 +2,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 import pandas as pd
-import geopandas as gpd
-import pandas as pd
 import xarray as xr
 import numpy as np
 from src.config import Config
@@ -15,7 +13,7 @@ import matplotlib.animation as animation
 
 cfg = Config()
 def plot_month_map(
-    df: pd.DataFrame,
+    df,
     year: int,
     month: int,
     title: str,
@@ -68,6 +66,8 @@ def plot_historical_fires(
     target_year: int,
     target_month: int
 ):
+    import geopandas as gpd
+    
     df = pd.read_csv(csv_path)
     df['acq_date'] = pd.to_datetime(df['acq_date'])
     
@@ -175,6 +175,8 @@ def plot_landcover_map(parquet_path: str):
 def create_bivariate_map(
     df, var1='vpd', var2='ghm', output_path='docs/bivariate.png'
 ):
+    import geopandas as gpd
+    
     subset = df[
         (df["valid_time"].dt.year == 2022) & 
         (df["valid_time"].dt.month == 7)
@@ -252,6 +254,7 @@ def animate_risk_over_time(
     
     xs = sorted(df['x_round'].unique())
     ys = sorted(df['y_round'].unique())
+    import geopandas as gpd
 
     boundary = gpd.read_file(boundary_geojson)
     if boundary.crs is None:
@@ -337,6 +340,8 @@ def save_to_geotiff(
     # new_x = np.linspace(x_min, x_max, 1000)
     
     # da_smooth = da.interp(y=new_y, x=new_x, method="linear")
+    import geopandas as gpd
+
     khmao_boundary = gpd.read_file(Config().khmao_geojson)
     da_smooth = da.rio.write_crs("EPSG:4326")
     da_smooth = da_smooth.rio.clip(khmao_boundary.geometry, khmao_boundary.crs, drop=True)
@@ -425,6 +430,7 @@ def map_top_driver(df, driver='vpd_ghm_interaction', year=2022, month=7, output_
     ax.legend(loc='upper right')
 
     ax.grid(True, alpha=0.3)
+    import geopandas as gpd
     
     if hasattr(cfg, 'khmao_geojson') and cfg.khmao_geojson:
         boundary = gpd.read_file(cfg.khmao_geojson)

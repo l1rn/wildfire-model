@@ -1,33 +1,28 @@
-from src.extract import data_loader
-from src.config import PROCESSED_DIR, RAW_DIR
-from src.collection import GeeExtractor, cds_extractor
-from src.models import cross_validation, models
-from src.cli import menu
-from src.pipelines import WildfirePipeline, TemperaturePipeline
-from src.config import Config 
+_cfg = None
 
-import pandas as pd
-
-import src.preprocessing as preprocessing
-import src.output.data_analysis as da
-from src.output.maps import plot_historical_fires, plot_landcover_map
-import questionary
-
-collection = GeeExtractor()
-cfg = Config()
+def get_cfg():
+    global _cfg
+    if _cfg is None:
+        from src.config import Config
+        _cfg = Config()
+    return _cfg
 
 def build_xgb(train):
+    from src.models import models
     scale_pos_weight = len(train) / train["fire"].sum()
     return models.get_xgboost(scale_pos_weight) 
 
 dict = {1: "raw", 2: "preprocessing", 3: "extract data", 4: "testing the model", 0: "exit"}
 
 def show_era5_head():
+    from src.config import RAW_DIR
+    from src.extract import data_loader
     print("Showing era5 head...")
     df = data_loader.load_meterological(f"{RAW_DIR}/khmao_era5.nc")
     print(df.head())
     
 def show_master_table():
+    from src.extract import data_loader
     import pandas as pd
     df = data_loader.load_master_dataset()
     df = df.loc[:, ~df.columns.str.contains("^index")]
@@ -36,30 +31,41 @@ def show_master_table():
     print(df['year'].unique())
     
 def show_fire_archive_head():
+    from src.extract import data_loader
+    cfg = get_cfg()
     print("Showing fire archive head...")
     firms = data_loader.load_firms(cfg.raw_fire_data)
     print(firms.head())
     
 def show_ghm_info():
+    from src.extract import data_loader
+    cfg = get_cfg()
     print("Showing Global Human Modification head...")
     human_mod = data_loader.load_static_raster(cfg.raw_human_mod)
     print(human_mod.head())
     
 def show_topography_info():
+    from src.extract import data_loader
     print("Showing Topography head...")
+    cfg = get_cfg()
     dem = data_loader.load_static_raster(cfg.raw_dem)
     print(dem.head())
     
 def show_landcover_info():
+    from src.extract import data_loader
+    cfg = get_cfg()
     print("Showing Land Cover head...")
     lc = data_loader.load_static_raster(cfg.raw_landcover)
     print(lc.head())
     
 def process_and_upload():
+    import src.preprocessing as preprocessing
     ds = preprocessing.process_data()
     preprocessing.upload_dataset_to_parquet(ds)
     
 def summarize_cv():
+    from src.extract import data_loader
+    from src.models import cross_validation, models
     df = data_loader.load_master_dataset()
     print("Loaded: ", df.shape)
     
@@ -88,37 +94,32 @@ def summarize_cv():
     )
 
 def wildfire_pipeline():
+    from src.cli import menu
+    from src.pipelines import WildfirePipeline
+    import questionary
+    cfg = get_cfg()
     name, factory = menu.choose_model()
-    use_lag = questionary.confirm("Use lag variables in data model").ask()
+    use_lag = questionary.confirm("Use lag variables in data model", default=False).ask()
+    use_tune = questionary.confirm("Use tune to seek for hyperparameters in the model", default=False).ask()
     groups = ["all", 
             #   "natural", "anthropogenic", "compounding"
               ]
     results = {}
     for group in groups:
-        if cfg.production_mode:
-            import json
-            with open(cfg.xgboost_params, 'r') as f:
-                best_params = json.load(f)
-                
-            pipeline = WildfirePipeline(
-                factory, 
-                use_lag=use_lag, 
-                tune=True, 
-                params=best_params,
-                feature_group=group,
-                downsample_ratio=10,
-                # use_smote=True,
-                # smote_ratio=0.2,
-            )
-        else:
-            pipeline = WildfirePipeline(
-                factory, 
-                use_lag, 
-                tune=True,
-                use_smote=True,
-                downsample_ratio=3,
-                smote_ratio=0.5
-            ) 
+        import json
+        with open(cfg.xgboost_params, 'r') as f:
+            best_params = json.load(f)
+            
+        pipeline = WildfirePipeline(
+            factory, 
+            use_lag=use_lag, 
+            tune=use_tune, 
+            params=best_params,
+            feature_group=group,
+            downsample_ratio=10,
+            # use_smote=True,
+            # smote_ratio=0.2,
+        )
         pipeline.run()
         metrics_ans = questionary.checkbox("which metrics to execute?", choices=[
             "imbalanced test set",
@@ -128,20 +129,26 @@ def wildfire_pipeline():
             results[group] = pipeline.get_metrics(parameter="imbalanced")
         elif metrics_ans == "balanced test set":
             results[group] = pipeline.get_metrics(parameter="balanced")
-    
+    import pandas as pd
     df_table = pd.concat(results, axis=0)
     
     print(df_table)
 
 def eda_execution():
+    import src.output.data_analysis as da
+    from src.extract import data_loader
     df = data_loader.load_master_dataset()
     da.execute_eda_pipeline(df)
 
 def temperature_pipeline():
+    from src.pipelines import TemperaturePipeline
     pipeline = TemperaturePipeline()
     pipeline.run()
     
 def plot_data():
+    from output.evaluate import plot_historical_fires, plot_landcover_map
+    cfg = get_cfg()
+
     options = {
         1: ("plot for historical fires",
             lambda: plot_historical_fires(
@@ -167,12 +174,18 @@ def plot_data():
         print("Wrong answer")
 
 def execute_modis_pipeline():
+    from src.collection import GeeExtractor
+    collection = GeeExtractor()
     collection.run()
 
 def execute_validation():
+    from src.config import RAW_DIR
+    from src.collection import GeeExtractor
+    collection = GeeExtractor()
     collection.validate_with_sentinel2(f"{RAW_DIR}/validation_sample.csv")
     
 def execute_cds_era5():
+    from src.collection import cds_extractor
     cds_extractor.extract_era5()
     
 options = {

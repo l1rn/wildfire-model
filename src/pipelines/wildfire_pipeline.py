@@ -1,24 +1,12 @@
-from src.extract import data_loader, split
-from src.output import train as tr
-from src.output import maps
-from src.config import Config, PROCESSED_DIR
-from src.models import models as mod
+_cfg = None
 
-from pathlib import Path
-import pandas as pd
-import questionary
-from sklearn.metrics import (
-    precision_recall_curve, 
-    roc_auc_score, 
-    classification_report, 
-)
+def get_cfg():
+    global _cfg
+    if _cfg is None:
+        from src.config import Config
+        _cfg = Config()
+    return _cfg
 
-from imblearn.over_sampling import SMOTE
-from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
-from sklearn.ensemble import RandomForestClassifier
-
-cfg = Config()
 class WildfirePipeline:
     def __init__(
         self, model_factory, use_lag: bool, 
@@ -39,6 +27,7 @@ class WildfirePipeline:
         self.feature_group = feature_group
         
     def load_data(self):
+        from src.extract import data_loader
         df = data_loader.load_master_dataset()
         df = df.loc[:, ~df.columns.str.contains("^index|level_0")]
         data_loader.validate_dataset(df)
@@ -91,6 +80,8 @@ class WildfirePipeline:
             self.features = all_candidates
 
     def evaluation_every_model(self, test, X_train, y_train, K=1000):
+        import questionary
+        from src.output import train as tr
         print("normal test df")
         
         X_test = test[self.features]
@@ -142,7 +133,8 @@ class WildfirePipeline:
         return test_probs
     
     def balance_test_set(self, test_df, random_state=42):
-
+        import pandas as pd
+        
         fire = test_df[test_df['fire'] == 1]
         non_fire = test_df[test_df['fire'] == 0]
         
@@ -156,12 +148,18 @@ class WildfirePipeline:
         return balanced.sample(frac=1, random_state=random_state)
     
     def train(self, df):
+        from imblearn.over_sampling import SMOTE
+        from xgboost import XGBClassifier
+        from lightgbm import LGBMClassifier
+        from sklearn.ensemble import RandomForestClassifier
+        from src.extract import split
         train, val, test  = split.temporal_split(df)       
         
         ones = train[train['fire'] == 1]
         zeros = train[train['fire'] == 0]
         
         if self.downsample_ratio is not None:
+            import pandas as pd
             n_zeros = min(len(ones) * self.downsample_ratio, len(zeros))
             zeros_sampled = zeros.sample(n=n_zeros, random_state=42)
             train_balanced = pd.concat([ones, zeros_sampled])
@@ -179,9 +177,11 @@ class WildfirePipeline:
         
         X_val = val[self.features]
         y_val = val["fire"]
+
+        from src.models import models as mod
         if "xgboost" in self.model_factory.__name__:
             if self.tune:
-                self.model = mod.tuning(scale_pos_weight, X_val, y_val, model_type="xgb")
+                self.model = mod.tuning(scale_pos_weight, X_train, y_train, X_val, y_val, model_type="xgb")
             else:
                 model_params = self.params.copy()
                 model_params['scale_pos_weight'] = scale_pos_weight
@@ -190,7 +190,7 @@ class WildfirePipeline:
                 self.model = XGBClassifier(**model_params)
         elif "lightgbm" in self.model_factory.__name__:
             if self.tune:
-                self.model = mod.tuning(scale_pos_weight, X_val, y_val, model_type="lgbm",)
+                self.model = mod.tuning(scale_pos_weight, X_train, y_train,X_val, y_val, model_type="lgbm",)
             else:
                 model_params = self.params.copy()
                 model_params['scale_pos_weight'] = scale_pos_weight
@@ -199,7 +199,7 @@ class WildfirePipeline:
                 self.model = LGBMClassifier(**model_params)
         elif "rf" in self.model_factory.__name__:
             if self.tune:
-                self.model = mod.tuning(scale_pos_weight, X_val, y_val, "rf")
+                self.model = mod.tuning(scale_pos_weight, X_train, y_train, X_val, y_val, "rf")
             else:
                 model_params['class_weight'] = 'balanced'
                 model_params['random_state'] = 42
@@ -224,6 +224,10 @@ class WildfirePipeline:
         normal = test_df[test_df['is_extreme_year'] == 0]
         
         print("extreme:", len(test_df['is_extreme_year']))
+        from sklearn.metrics import (
+            roc_auc_score, 
+            classification_report, 
+        )
         if len(extreme) > 0:
             probs_ext = probs[test_df['is_extreme_year'] == 1]
             y_ext = test_df.loc[test_df['is_extreme_year'] == 1, 'fire']
@@ -239,29 +243,6 @@ class WildfirePipeline:
             print("\n=== Normal Years Performance ===")
             print(classification_report(y_norm, preds_norm))
             print(f"ROC-AUC (normal): {roc_auc_score(y_norm, probs_norm):.4f}")
-    
-    def visualize(self, model, df_full):
-        target_month = df_full[
-            (df_full["valid_time"].dt.year == 2022) & 
-            (df_full["valid_time"].dt.month == 7)
-        ].copy()
-        X_viz = target_month[self.features]
-        target_month["fire_probability"] = model.predict_proba(X_viz)[:, 1]
-        
-        maps.plot_month_map(
-            target_month,
-            year=2022,
-            month=7,
-            title="Wildfire Forecast – July 2022",
-        )
-        
-    def save(self, test):
-        maps.save_to_geotiff(
-            test,
-            year=2022,
-            month=7,
-            filename="khmao.tif"
-        )
         
     def get_metrics(self, parameter="imbalanced"):
         if parameter == "imbalanced":
@@ -272,6 +253,7 @@ class WildfirePipeline:
             metrics_data = self.metrics
         
         if not self.metrics:
+            import pandas as pd
             return pd.DataFrame()
         
         records = []
@@ -291,6 +273,7 @@ class WildfirePipeline:
         return df
                 
     def run(self):
+        from src.output import train as tr, evaluation
         df = self.load_data()
         self.build_features()
         model, test = self.train(df)
@@ -304,19 +287,19 @@ class WildfirePipeline:
         print("\n === Risk Percentile Analysis ===")
         percentile_results = tr.evaluate_risk_percentiles(test)
         print(percentile_results.to_string(index=False))
+        from src.config import PROCESSED_DIR
         
-        maps.plot_cumulative_gains(
-            test, output_file=Path(PROCESSED_DIR) / "cumulative_gains_chart.png"
-        )
         if 'fire_probability' not in df_full.columns:
             print("ERROR: fire_probability column was not added!")
         else:
             print("fire_probability column added successfully.")
             print(df_full[['valid_time', 'fire_probability', 'x', 'y']].head())
         
+        import questionary
         options = questionary.checkbox(
             "Select options:",
             choices=[
+                "Plot Cumulative Gains",
                 "Feature Importance from the model",
                 "SHAP Explanation Bar & Summary",
                 "Visualize Risk-map",
@@ -331,9 +314,14 @@ class WildfirePipeline:
                 "Threshold Performance Plot"
             ]
         ).ask()
-        
+
+        from pathlib import Path
+        if "Plot Cumulative Gains" in options:
+            evaluation.plot_cumulative_gains(
+                test, output_file=Path(PROCESSED_DIR) / "cumulative_gains_chart.png"
+            )
         if "Feature Importance from the model" in options:
-            maps.plot_feature_importance(
+            evaluation.plot_feature_importance(
                 model, 
                 features=self.features, 
                 top_n=15, 
@@ -348,7 +336,7 @@ class WildfirePipeline:
         if "Save the map in TIFF format for QGIS" in options:
             self.save(test)
         if "Create Bivarite Map GHM & VPD" in options:
-            maps.create_bivariate_map(df_full, var1='vpd', var2='ghm')
+            evaluation.create_bivariate_map(df_full, var1='vpd', var2='ghm')
         if "Spatial Reliability Map" in options:
             tr.generate_spatial_reliability_map(
                 original_df=test,
@@ -362,11 +350,12 @@ class WildfirePipeline:
                 y_test, probs, output_file=Path(PROCESSED_DIR) / "calibration_plot.png"
             )
         if "Time Series of Predicted vs. Observed Fire Counts" in options:
-            maps.plot_time_series_risk(df_full, output_file=Path(PROCESSED_DIR) / "time_series_risk.png", freq='M')
+            evaluation.plot_time_series_risk(df_full, output_file=Path(PROCESSED_DIR) / "time_series_risk.png", freq='M')
         if "Animate Risk Over Time" in options:
-            maps.animate_risk_over_time(df_full, years=None, output_file=cfg.risk_map_animation_output)
+            cfg = get_cfg()
+            evaluation.animate_risk_over_time(df_full, years=None, output_file=cfg.risk_map_animation_output)
         if "Map of Top Driver" in options:
-            maps.map_top_driver(df_full, output_file=Path(PROCESSED_DIR) / "top_driver_map.png")
+            evaluation.map_top_driver(df_full, output_file=Path(PROCESSED_DIR) / "top_driver_map.png")
         if "Threshold Performance Plot" in options:
             test_probs = model.predict_proba(test[self.features])[:, 1]
             tr.plot_threshold_analysis(test['fire'], test_probs, output_file=Path(PROCESSED_DIR) / "threshold_analysis.png")

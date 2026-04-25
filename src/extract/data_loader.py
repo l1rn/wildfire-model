@@ -67,13 +67,15 @@ def load_firms(path: str) -> Optional[gpd.GeoDataFrame]:
 def load_master_dataset():
     df = pd.read_parquet(cfg.processed_table)
     df = df.reset_index()
-    df["valid_time"] = pd.to_datetime(df["valid_time"])
+    df["valid_time"] = pd.to_datetime(df["valid_time"], format="%Y-%m-%d")
     df['month'] = df['valid_time'].dt.month
     
-    df = df[df['year'].isin(range(2010, 2024))]
     # df = df[df['month'].isin(cfg.WILDFIRE_SEASON_MONTHS)]
-    
-    df = df[~df['landcover'].isin(cfg.NON_BURNABLE_CLASSES_LC)]
+    mask = (
+        df['year'].between(2010, 2023) &
+        ~df['landcover'].isin(cfg.NON_BURNABLE_CLASSES_LC)
+    )
+    df = df.loc[mask]
     return df
 
 def load_russian_fires(filepath: str, use_start_date: bool = True):
@@ -95,31 +97,11 @@ def load_russian_fires(filepath: str, use_start_date: bool = True):
     return gdf[cols].copy()
 
 def create_new_features(df: pd.DataFrame):
-    df["vpd_ghm_interaction"] = df["vpd"] * df["ghm"]
-    df["vpd_cisi_interaction"] = df["vpd"] * df["cisi"]
-    df["vpd_oil_interaction"] = df["vpd"] * df["dist_oil_gas"]
     
-    df["month"] = df["valid_time"].dt.month
-    df["month_sin"] = np.sin(2 * np.pi * df['month'] / 12)
-    df["month_cos"] = np.cos(2 * np.pi * df['month'] / 12)
-    df["vpd_3m_avg"] = (
-        df.groupby(['x', 'y'])['vpd']
-        .rolling(3, min_periods=1)
-        .mean()
-        .reset_index(level=[0,1], drop=True)
-    )
-    df["vpd_3m_avg_ghm_interaction"] = df["vpd_3m_avg"] * df["ghm"]
-    df["temp_ghm_interaction"] = df["temp"] * df["ghm"]
-    df["temp_cisi_interaction"] = df["temp"] * df["cisi"]
-    df["temp_precip_interaction"] = df["temp"] * df["precip"]
-    df["dew_ghm_interaction"] = df["dew"] * df["ghm"]
-    df["ndvi_ghm_interaction"] = df["ndvi"] * df["ghm"]
-    df["ndvi_vpd_interaction"] = df["ndvi"] * df["vpd"]
-    df['precip_30p_sum'] = (
-        df.groupby(['y', 'x'])['precip']
-        .transform(lambda x: x.rolling(window=30, min_periods=1).sum())
-    )
-    df['wind_slope_synergy'] = df['slope'] * np.sqrt(df['u10']**2 + df['v10']**2)
+    # df["month"] = df["valid_time"].dt.month
+    # df["month_sin"] = np.sin(2 * np.pi * df['month'] / 12)
+    # df["month_cos"] = np.cos(2 * np.pi * df['month'] / 12)
+    
     return df
 
 def create_lag_features(df: pd.DataFrame, lag_vars=['vpd','temp','precip','fire'], lags=1):
@@ -133,14 +115,14 @@ def create_lag_features(df: pd.DataFrame, lag_vars=['vpd','temp','precip','fire'
 
 def prepare_features(df: pd.DataFrame):
     df = df.sort_values(["y", "x", "valid_time"])        
-    df = create_lag_features(df)
-    df = create_new_features(df)
+    # df = create_lag_features(df)
+    # df = create_new_features(df)
     
-    df = df.dropna(subset=[
-        "temp_lag1",
-        "vpd_lag1",
-        "precip_lag1"
-    ])
+    # df = df.dropna(subset=[
+    #     "temp_lag1",
+    #     "vpd_lag1",
+    #     "precip_lag1"
+    # ])
     
     return df
 

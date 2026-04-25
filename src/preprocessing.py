@@ -80,6 +80,28 @@ def daily_nesterov(ds, temp_var='t2m', dew_var='d2m', precip_var='tp',
     nesterov.name = 'nesterov_fire_index'
     return nesterov
 
+def create_features(df: pd.DataFrame):
+    df["vpd_ghm_interaction"] = df["vpd"] * df["ghm"]
+    df["vpd_cisi_interaction"] = df["vpd"] * df["cisi"]
+    df["vpd_3m_avg"] = (
+        df.groupby(['x', 'y'])['vpd']
+        .rolling(3, min_periods=1)
+        .mean()
+        .reset_index(level=[0,1], drop=True)
+    )
+    df["temp_ghm_interaction"] = df["temp"] * df["ghm"]
+    df["temp_cisi_interaction"] = df["temp"] * df["cisi"]
+    df["temp_precip_interaction"] = df["temp"] * df["precip"]
+    df['precip_30p_sum'] = (
+        df.groupby(['y', 'x'])['precip']
+        .transform(lambda x: x.rolling(window=30, min_periods=1).sum())
+    )
+    df['wind_slope_synergy'] = df['slope'] * np.sqrt(df['u10']**2 + df['v10']**2)
+    df["dew_ghm_interaction"] = df["dew"] * df["ghm"]
+    df["ndvi_ghm_interaction"] = df["ndvi"] * df["ghm"]
+    df["ndvi_vpd_interaction"] = df["ndvi"] * df["vpd"]
+    return df
+
 def harmonize_fire_records(
     off_df: gpd.GeoDataFrame,
     v_df: gpd.GeoDataFrame,
@@ -139,16 +161,16 @@ def process_data(target_resolution=0.25, time_agg='monthly', use_area=True, min_
     
     lc = data_loader.load_static_raster(cfg.raw_landcover)
     ghm = data_loader.load_static_raster(cfg.raw_human_mod)
-    cisi = data_loader.load_static_raster("/home/lirn/geo_env/data/raw/khmao_cisi_1km.tif")
+    cisi = data_loader.load_static_raster("data/raw/khmao_cisi_1km.tif")
     oil_gas = data_loader.load_static_raster(cfg.raw_oil_gas)
     peat = data_loader.load_static_raster(cfg.raw_peatland)
     pop = data_loader.load_static_raster(cfg.raw_pop_density)
     ds = data_loader.load_meterological(cfg.raw_weather)
     fire_data = data_loader.load_russian_fires("data/raw/fires_inside_borders.csv")   
-    viirs_firms = data_loader.load_firms("/home/lirn/geo_env/data/raw/fire_archive_modis.csv")
-    ndvi = data_loader.load_gee_ndvi("/home/lirn/geo_env/data/raw/khmao_ndvi_monthly_2010_2025.tif")
-    lai = data_loader.load_gee_ndvi("/home/lirn/geo_env/data/raw/khmao_lai_monthly_2010_2024.tif", end_year=2024)
-    fpar = data_loader.load_gee_ndvi("/home/lirn/geo_env/data/raw/khmao_fpar_monthly_2010_2024.tif", end_year=2024)
+    viirs_firms = data_loader.load_firms("data/raw/fire_archive_modis.csv")
+    ndvi = data_loader.load_gee_ndvi("data/raw/khmao_ndvi_monthly_2010_2025.tif")
+    lai = data_loader.load_gee_ndvi("data/raw/khmao_lai_monthly_2010_2024.tif", end_year=2024)
+    fpar = data_loader.load_gee_ndvi("data/raw/khmao_fpar_monthly_2010_2024.tif", end_year=2024)
 
     if viirs_firms is not None and not viirs_firms.empty:
         fire_data = harmonize_fire_records(
@@ -356,19 +378,21 @@ def process_data(target_resolution=0.25, time_agg='monthly', use_area=True, min_
         all_touched=True
     )
     
-    df = (
+    df_stacked = (
         dataset
         .stack(points=("x", "y", "valid_time"))
         .dropna("points", subset=["temp", "dem"])
     )
-    
-    df_final = df.to_dataframe().reset_index()
+
+    df_final = df_stacked.to_dataframe().reset_index()
     if time_agg == 'quarterly':
         df_final['quarter'] = df_final['valid_time'].dt.quarter
     elif time_agg == 'yearly':
         df_final['year'] = df_final['valid_time'].dt.year
+    
+    df = create_features(df_final)
 
-    return df_final
+    return df
 
 def upload_dataset_to_parquet(
     ds: pd.DataFrame
@@ -377,5 +401,4 @@ def upload_dataset_to_parquet(
     ds["year"] = ds["valid_time"].dt.year
     correlation = ds['ghm'].corr(ds['cisi'])
     print(f"Correlation between GHM and CISI: {correlation}")
-    ds.to_parquet(cfg.processed_table, index=True)
-    
+    ds.to_parquet(cfg.processed_table, index=False)

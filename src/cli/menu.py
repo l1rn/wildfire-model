@@ -3,7 +3,7 @@ from src.models import models
 def choose_model():
     model_options = {
         1: ("XGBoost", models.get_xgboost),
-        2: ("RF", models.get_random_forest),
+        2: ("rf", models.get_random_forest),
         3: ("LightGBM", models.lightgbm_factory)
     }
     print("\nChoose the model to execute:\n")

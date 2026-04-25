@@ -82,35 +82,10 @@ def lightgbm_factory():
 
 def tuning(scale_pos_weight, X_train, y_train, X_val, y_val, model_type):
     def objective(trial):    
-        base_gradient_params = {
-            'n_estimators': trial.suggest_int('n_estimators', 50, 500),
-            'max_depth': trial.suggest_int('max_depth', 3, 15),
-            'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-            'subsample': trial.suggest_float('subsample', 0.6, 1.0),
-            'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
-            'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
-            'scale_pos_weight': scale_pos_weight,
-            'eval_metric': 'logloss',
-            'random_state': 42,
-            'verbosity': 0,                    
-        }
-        if model_type == "xgb":
-            params = {
-                'gamma': trial.suggest_float('gamma', 0, 5),
-            }
-            params = params | base_gradient_params
-            model = XGBClassifier(**params)
-        elif model_type == "lgbm":
-            params = {
-                'reg_alpha': trial.suggest_float('reg_alpha', 1e-8, 10.0, log=True),
-                'reg_lambda': trial.suggest_float('reg_lambda', 1e-8, 10.0, log=True),
-            }
-            params = params | base_gradient_params 
-            model = LGBMClassifier(**params)
-        elif model_type == "rf":
+        if model_type == "rf":
             params = {
                 'n_estimators': trial.suggest_int('n_estimators', 50, 500),
-                'max_depth': trial.suggest_int('max_depth', 3, 30),
+                'max_depth': trial.suggest_int('max_depth', 3, 15),
                 'min_samples_split': trial.suggest_int('min_samples_split', 2, 20),
                 'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, 10),
                 'max_features': trial.suggest_categorical('max_features', ['sqrt', 'log2', None]),
@@ -121,7 +96,33 @@ def tuning(scale_pos_weight, X_train, y_train, X_val, y_val, model_type):
             }
             model = RandomForestClassifier(**params)
         else:
-            raise ValueError("Unsupported model type")
+            base_gradient_params = {
+                'n_estimators': trial.suggest_int('n_estimators', 50, 500),
+                'max_depth': trial.suggest_int('max_depth', 3, 15),
+                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
+                'subsample': trial.suggest_float('subsample', 0.6, 1.0),
+                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
+                'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
+                'scale_pos_weight': scale_pos_weight,
+                'eval_metric': 'logloss',
+                'random_state': 42,
+                'verbosity': 0,                    
+            }
+            if model_type == "xgb":
+                params = base_gradient_params | {
+                    'gamma': trial.suggest_float('gamma', 0, 5),
+                }
+                params = params | base_gradient_params
+                model = XGBClassifier(**params)
+            elif model_type == "lgbm":
+                params = base_gradient_params | {
+                    'reg_alpha': trial.suggest_float('reg_alpha', 1e-8, 10.0, log=True),
+                    'reg_lambda': trial.suggest_float('reg_lambda', 1e-8, 10.0, log=True),
+                }
+                params = params | base_gradient_params 
+                model = LGBMClassifier(**params)
+            else:
+                raise ValueError("Unsupported model type")
         model.fit(X_train, y_train)
         y_val_proba = model.predict_proba(X_val)[:, 1]
         precisions, recalls, thresholds = precision_recall_curve(y_val, y_val_proba)

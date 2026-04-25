@@ -121,14 +121,14 @@ def wildfire_pipeline():
             # smote_ratio=0.2,
         )
         pipeline.run()
-        metrics_ans = questionary.checkbox("which metrics to execute?", choices=[
+        metrics_answers = questionary.checkbox("which metrics to execute?", choices=[
             "imbalanced test set",
             "balanced test set"
         ]).ask()
-        if metrics_ans == "imbalanced test set":
-            results[group] = pipeline.get_metrics(parameter="imbalanced")
-        elif metrics_ans == "balanced test set":
-            results[group] = pipeline.get_metrics(parameter="balanced")
+        if "imbalanced test set" in metrics_answers:
+            results[f"{group}_imbalanced"] = pipeline.get_metrics(parameter="imbalanced")
+        if "balanced test set" in metrics_answers:
+            results[f"{group}_balanced"] = pipeline.get_metrics(parameter="balanced")
     import pandas as pd
     df_table = pd.concat(results, axis=0)
     
@@ -146,7 +146,7 @@ def temperature_pipeline():
     pipeline.run()
     
 def plot_data():
-    from output.evaluate import plot_historical_fires, plot_landcover_map
+    from output.evaluation import plot_historical_fires, plot_landcover_map
     cfg = get_cfg()
 
     options = {

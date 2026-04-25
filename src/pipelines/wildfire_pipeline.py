@@ -197,10 +197,11 @@ class WildfirePipeline:
                 model_params['random_state'] = 42
                 model_params['verbosity'] = -1
                 self.model = LGBMClassifier(**model_params)
-        elif "rf" in self.model_factory.__name__:
+        elif "get_random_forest" in self.model_factory.__name__:
             if self.tune:
                 self.model = mod.tuning(scale_pos_weight, X_train, y_train, X_val, y_val, "rf")
             else:
+                model_params = self.params.copy()
                 model_params['class_weight'] = 'balanced'
                 model_params['random_state'] = 42
                 model_params['n_jobs'] = -1
@@ -245,6 +246,7 @@ class WildfirePipeline:
             print(f"ROC-AUC (normal): {roc_auc_score(y_norm, probs_norm):.4f}")
         
     def get_metrics(self, parameter="imbalanced"):
+        import pandas as pd
         if parameter == "imbalanced":
             metrics_data = self.metrics
         elif parameter == "balanced":
@@ -252,8 +254,7 @@ class WildfirePipeline:
         else:
             metrics_data = self.metrics
         
-        if not self.metrics:
-            import pandas as pd
+        if not metrics_data:
             return pd.DataFrame()
         
         records = []

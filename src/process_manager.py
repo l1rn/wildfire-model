@@ -146,32 +146,9 @@ def temperature_pipeline():
     pipeline.run()
     
 def plot_data():
-    from output.evaluation import plot_historical_fires, plot_landcover_map
-    cfg = get_cfg()
-
-    options = {
-        1: ("plot for historical fires",
-            lambda: plot_historical_fires(
-            cfg.raw_fire_data,
-            cfg.khmao_geojson,
-            2022,
-            7
-        )),
-        2: ("plot for landcover",
-            lambda: plot_landcover_map(
-                cfg.processed_table
-            ))
-    }
-    for key, (name, _) in options.items():
-        print(f"{key}:", name)
-        
-    ans = int(input("option: ")) 
-    _, action = options.get(ans)
-        
-    if action:
-        action()
-    else:
-        print("Wrong answer")
+    from src.pipelines import PreprocessingVisualizationPipeline
+    pipeline = PreprocessingVisualizationPipeline()
+    pipeline.run()
 
 def execute_modis_pipeline():
     from src.collection import GeeExtractor

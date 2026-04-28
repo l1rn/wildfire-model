@@ -2,10 +2,6 @@ import xarray as xr
 import rioxarray
 import pandas as pd
 import geopandas as gpd
-import numpy as np
-from shapely.geometry import Point
-
-from src.config import Config
 
 from typing import Optional
 import logging
@@ -13,7 +9,14 @@ import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-cfg = Config()
+_cfg = None
+
+def get_cfg():
+    global _cfg
+    if _cfg is None:
+        from src.config import Config
+        _cfg = Config()
+    return _cfg
 
 def load_meterological(path: str) -> Optional[xr.Dataset]:
     """Loads ERA5 NetCDF and ensure coordinates are standard."""
@@ -36,6 +39,7 @@ def load_static_raster(path: str) -> Optional[xr.DataArray]:
         return None
 
 def load_gee_ndvi(tif_path: str, start_year: int = 2010, end_year: int = 2025):
+    import numpy as np
     da = rioxarray.open_rasterio(tif_path)
     da = da.where(da != 9999, np.nan)
     
@@ -65,6 +69,7 @@ def load_firms(path: str) -> Optional[gpd.GeoDataFrame]:
         return None
     
 def load_master_dataset():
+    cfg = get_cfg()
     df = pd.read_parquet(cfg.processed_table)
     df = df.reset_index()
     df["valid_time"] = pd.to_datetime(df["valid_time"], format="%Y-%m-%d")
@@ -90,7 +95,9 @@ def load_russian_fires(filepath: str, use_start_date: bool = True):
     
     if 'code' in df.columns:
         df = df.sort_values('date_beginning').groupby('code').first().reset_index()
-        
+    
+    from shapely.geometry import Point
+
     geometry = [Point(xy) for xy in zip(df['longitude'], df['latitude'])]
     gdf = gpd.GeoDataFrame(df, geometry=geometry, crs='EPSG:4326')
         

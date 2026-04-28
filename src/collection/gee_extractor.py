@@ -88,7 +88,7 @@ class GeeExtractor:
             
         export_params = {
             'region': self.bbox.getInfo()['coordinates'],
-            'scale': 1000,
+            'scale': 10000,
             'crs': 'EPSG:4326',
             'fileFormat': 'GeoTIFF',
             'maxPixels': 1e9,
@@ -136,7 +136,7 @@ class GeeExtractor:
     
     def monthly_image(self):
         start_year = 2010
-        end_year = 2025
+        end_year = 2024
         
         years = ee.List.sequence(start_year, end_year)
         months = ee.List.sequence(1, 12)

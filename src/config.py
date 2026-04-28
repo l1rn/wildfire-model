@@ -9,6 +9,7 @@ BASE_DIR = SRC_DIR.parent
 RAW_DIR = BASE_DIR / "data" / "raw"
 PROCESSED_DIR = BASE_DIR / "data" / "processed"
 EDA_DIR = BASE_DIR / "data" / "eda"
+PREPROCESSED_DIR = BASE_DIR / "data" / "preprocessed"
 
 class Config:
     def __init__(self, path="config.yaml"):

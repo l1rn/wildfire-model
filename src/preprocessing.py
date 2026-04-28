@@ -364,7 +364,6 @@ def process_data(target_resolution=0.25, time_agg='monthly', use_area=True, min_
         "lai": lai_coarse,
         "fpar": fpar_coarse,
         "fire": fire_coarse,
-        "nesterov": nesterov_coarse
     }
     
     dataset_dict.update(processed_static)

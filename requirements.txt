@@ -24,7 +24,6 @@ decorator==5.2.1
 donfig==0.8.1.post1
 earthengine-api==1.7.13
 eccodes==2.45.0
-eccodeslib==2.45.1.9
 eckitlib==1.32.4.9
 ecmwf-datastores-client==0.5.0
 eerepr==0.1.2

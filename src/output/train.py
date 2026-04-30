@@ -182,7 +182,9 @@ def generate_partial_dependence_plots(model, X_test, sample_size=10000, random_s
     and interaction effects.
     """
     print("Generating Partial Dependence Plots...")
+    
     X_eval = X_test
+        
     features_to_plot = [
         'ghm', 
         'vpd', 

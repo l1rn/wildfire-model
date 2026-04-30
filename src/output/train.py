@@ -182,12 +182,7 @@ def generate_partial_dependence_plots(model, X_test, sample_size=10000, random_s
     and interaction effects.
     """
     print("Generating Partial Dependence Plots...")
-    if len(X_test) > sample_size:
-        print(f"Subsampling test set from {len(X_test)} to {sample_size} rows for rapid PDP generation.")
-        X_eval = X_test.sample(n=sample_size, random_state=random_state)
-    else:
-        X_eval = X_test
-        
+    X_eval = X_test
     features_to_plot = [
         'ghm', 
         'vpd', 

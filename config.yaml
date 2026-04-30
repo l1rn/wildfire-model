@@ -6,15 +6,15 @@ production: True
 
 data_paths:
   raw_weather: "data/raw/khmao_era5.nc"
-  raw_dem: "data/raw/khmao_terrain_1km.tif"
-  raw_landcover: "data/raw/khmao_lc_1km.tif"
-  raw_pop_density: "data/raw/khmao_pop.tif"
+  raw_dem: "data/raw/khmao_terrain_10km.tif"
+  raw_landcover: "data/raw/khmao_landcover_10km.tif"
+  raw_pop_density: "data/raw/khmao_pop_10km.tif"
   raw_viirs_firms: "data/raw/khmao_fire_archive.csv"
   raw_fire_data: "data/raw/khmao_real_fires.parquet"
-  raw_ghm: "data/raw/khmao_human_mod_1km.tif"
-  raw_peatland: "data/raw/khmao_peatland.tif"
-  raw_oil_gas: "data/raw/khmao_oil_gas.tif"
-
+  raw_ghm: "data/raw/khmao_ghm_10km.tif"
+  raw_peatland: "data/raw/khmao_peatland_flag_10km.tif"
+  raw_oil_gas: "data/raw/khmao_dist_oil_gas_10km.tif"
+  raw_cisi: "data/raw/khmao_cisi_10km.tif"
   real_fire_data: "data/raw"
 
   full_era5: "data/raw/khmao_era5_full.nc"

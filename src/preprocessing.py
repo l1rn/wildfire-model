@@ -161,14 +161,14 @@ def process_data(target_resolution=0.25, time_agg='monthly', use_area=True, min_
     
     lc = data_loader.load_static_raster(cfg.raw_landcover)
     ghm = data_loader.load_static_raster(cfg.raw_human_mod)
-    cisi = data_loader.load_static_raster("data/raw/khmao_cisi_1km.tif")
+    cisi = data_loader.load_static_raster(cfg.raw_cisi)
     oil_gas = data_loader.load_static_raster(cfg.raw_oil_gas)
     peat = data_loader.load_static_raster(cfg.raw_peatland)
     pop = data_loader.load_static_raster(cfg.raw_pop_density)
     ds = data_loader.load_meterological(cfg.raw_weather)
     fire_data = data_loader.load_russian_fires("data/raw/fires_inside_borders.csv")   
     viirs_firms = data_loader.load_firms("data/raw/fire_archive_modis.csv")
-    ndvi = data_loader.load_gee_ndvi("data/raw/khmao_ndvi_monthly_2010_2025.tif")
+    ndvi = data_loader.load_gee_ndvi("data/raw/khmao_ndvi_monthly_2010_2024.tif", end_year=2024)
     lai = data_loader.load_gee_ndvi("data/raw/khmao_lai_monthly_2010_2024.tif", end_year=2024)
     fpar = data_loader.load_gee_ndvi("data/raw/khmao_fpar_monthly_2010_2024.tif", end_year=2024)
 

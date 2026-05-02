@@ -32,15 +32,15 @@ cfg = Config()
 
 def generate_metrics_model(y_test, preds, probs, threshold, K, k):
     return {
+        "roc_auc": roc_auc_score(y_test, probs),
+        "f1": f1_score(y_test, preds),
+        "f2": fbeta_score(y_test, preds, beta=2),
         "precision": precision_score(y_test, preds),
         "recall": recall_score(y_test, preds),
-        "f1": f1_score(y_test, preds),
-        "roc_auc": roc_auc_score(y_test, probs),
         "threshold": threshold,
-        "p@{K}": k,
+        "mcc": matthews_corrcoef(y_test, preds),
         "accuracy": accuracy_score(y_test, preds),
-        "f2": fbeta_score(y_test, preds, beta=2),
-        "mcc": matthews_corrcoef(y_test, preds)
+        "p@{K}": k,
     }
 
 def evaluate_logistic_regression(X_train, y_train, X_test, y_test, optimal_threshold=None):

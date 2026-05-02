@@ -123,6 +123,7 @@ def create_lag_features(df: pd.DataFrame, lag_vars=['vpd','temp','precip','fire'
 def prepare_features(df: pd.DataFrame):
     df = df.sort_values(["y", "x", "valid_time"])   
     df["vpd_ghm_ndvi_interaction"] = df["vpd"] * df["ghm"] * df["ndvi"]     
+    
     # df = create_lag_features(df)
     # df = create_new_features(df)
     

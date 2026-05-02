@@ -126,9 +126,9 @@ def wildfire_pipeline():
             "balanced test set"
         ]).ask()
         if "imbalanced test set" in metrics_answers:
-            results[f"{group}_imbalanced"] = pipeline.get_metrics(parameter="imbalanced")
+            results[f"imb"] = pipeline.get_metrics(parameter="imbalanced")
         if "balanced test set" in metrics_answers:
-            results[f"{group}_balanced"] = pipeline.get_metrics(parameter="balanced")
+            results[f"bal"] = pipeline.get_metrics(parameter="balanced")
     import pandas as pd
     df_table = pd.concat(results, axis=0)
     

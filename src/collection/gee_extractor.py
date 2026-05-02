@@ -20,7 +20,7 @@ class GeeExtractor:
     def run_gee_pipeline(self):
         lc = ee.Image("ESA/WorldCover/v200/2021").clip(self.bbox).uint8()
 
-        dem_col = ee.ImageCollection("projects/sat-io/open-datasets/GLO-30") \
+        dem_col = ee.ImageCollection("COPERNICUS/DEM/GLO30") \
             .filterBounds(self.bbox) \
            
         native_proj = dem_col \
@@ -40,14 +40,13 @@ class GeeExtractor:
             .rename(['elevation', 'slope']) \
             .float()
                 
-        ghm = ee.ImageCollection("projects/sat-io/open-datasets/GHM/HM_1990_2020_OVERALL_300M") \
-            .filter(ee.Filter.eq('year', 2020)) \
+        ghm = ee.ImageCollection("CSP/HM/GlobalHumanModification") \
             .first().clip(self.bbox)
             
         ogim = ee.FeatureCollection("EDF/OGIM/current") \
             .filterBounds(self.bbox)
             
-        dist_oil_gas = ogim.distance(100000) \
+        dist_oil_gas = ogim.distance(10000) \
             .clip(self.bbox) \
             .divide(1000).rename('dist_oil_gas_km').float()
             
@@ -67,7 +66,7 @@ class GeeExtractor:
         cisi = ee.Image("projects/sat-io/open-datasets/CISI/global_CISI") \
             .clip(self.bbox).rename("cisi")
             
-        years = range(2016, 2025) 
+        years = range(2010, 2024) 
         
         yearly_bands = []
         
@@ -127,8 +126,8 @@ class GeeExtractor:
         for name, image in layers.items():
             task = ee.batch.Export.image.toDrive(
                 image=image,
-                description=f'KHMAO_{name}_1km',
-                fileNamePrefix=f'khmao_{name}_1km',
+                description=f'KHMAO_{name}_10km',
+                fileNamePrefix=f'khmao_{name}_10km',
                 **export_params
             )
             task.start()
@@ -179,10 +178,9 @@ class GeeExtractor:
         print("Submitting single multiband export...")  
         task = ee.batch.Export.image.toDrive(
             image=stacked_image,
-            description='KHMAO_NDVI_monthly_2010_2025',
-            fileNamePrefix='khmao_ndvi_monthly_2010_2025',
+            description='KHMAO_NDVI_monthly_2010_2024',
+            fileNamePrefix='khmao_ndvi_monthly_2010_2024',
             region=self.bbox,
-            scale=10000,
             crs='EPSG:4326',
             maxPixels=1e13,
             folder='GEE_KHMAO_RAW'
@@ -239,7 +237,6 @@ class GeeExtractor:
             description='KHMAO_LAI_monthly_2010_2024',
             fileNamePrefix='khmao_lai_monthly_2010_2024',
             region=self.bbox,
-            scale=10000, 
             crs='EPSG:4326',
             maxPixels=1e13,
             folder='GEE_KHMAO_RAW'
@@ -295,7 +292,6 @@ class GeeExtractor:
             description='KHMAO_LAI_monthly_2010_2024',
             fileNamePrefix='khmao_lai_monthly_2010_2024',
             region=self.bbox,
-            scale=10000, 
             crs='EPSG:4326',
             maxPixels=1e13,
             folder='GEE_KHMAO_RAW'

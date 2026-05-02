@@ -52,13 +52,13 @@ class WildfirePipeline:
         engineered = [
             "vpd_ghm_interaction", 
             "vpd_3m_avg",
+            "vpd_ghm_ndvi_interaction",
             "temp_ghm_interaction",
             "temp_precip_interaction",
             "temp_cisi_interaction",
             "precip_30p_sum",
             "wind_slope_synergy",
             "ndvi_vpd_interaction",
-            "dew_ghm_interaction",
         ]
 
         anthropogenic = [
@@ -325,7 +325,7 @@ class WildfirePipeline:
             evaluation.plot_feature_importance(
                 model, 
                 features=self.features, 
-                top_n=15, 
+                top_n=10, 
                 output_file=Path(PROCESSED_DIR) / "feature_importance.png" 
             )
         if "Visualize Risk-map" in options:

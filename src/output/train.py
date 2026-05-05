@@ -181,6 +181,8 @@ def generate_partial_dependence_plots(model, X_test, sample_size=10000, random_s
     Generates 1D and 2D Partial Dependence Plots to visualize feature thresholds 
     and interaction effects.
     """
+    output_dir = Path(PROCESSED_DIR)
+    
     print("Generating Partial Dependence Plots...")
     
     X_eval = X_test
@@ -188,32 +190,31 @@ def generate_partial_dependence_plots(model, X_test, sample_size=10000, random_s
     features_1d = [
         'ghm', 
         'vpd', 
-        'ndiv',
+        'ndvi',
     ]
-    
 
-    fig, ax = plt.subplots(figsize=(15, 6))
-    
     display_1d = PartialDependenceDisplay.from_estimator(
         estimator=model,
         X=X_eval,
         features=features_1d,
         kind='average',
         grid_resolution=40, 
-        ax=ax,
         n_jobs=-1,
         n_cols=3,
     )
     
     fig_1d = display_1d.figure_
     fig_1d.set_size_inches(16, 6)
-    display_1d.figure_.suptitle("1D Partial Dependence Plots", fontsize=16)
+    fig_1d.suptitle(
+        'Partial Dependence (1D): Main Effects of GHM, VPD, and NDVI',
+        fontsize=16
+    )
 
-    output_filename_1d = Path(PROCESSED_DIR) / "pdp_1d.png"
-    plt.savefig(output_filename_1d, dpi=300, bbox_inches='tight')
+    output_1d = output_dir / "pdp_1d_main_effects.png"
+    fig_1d.savefig(output_1d, dpi=300, bbox_inches='tight')
     plt.close(fig_1d)
-    
-    print(f"Partial Dependence Plots saved successfully to {output_filename_1d}")
+
+    print(f"Saved 1D PDPs to {output_1d}")
     
     features_2d = [
         ('ghm', 'vpd'),
@@ -221,21 +222,24 @@ def generate_partial_dependence_plots(model, X_test, sample_size=10000, random_s
         ('vpd', 'ndvi'),
     ]
     
-    fig_2d = display_2d.figure_
-    fig_2d.set_size_inches(16, 6)
+    
     display_2d = PartialDependenceDisplay.from_estimator(
         estimator=model,
         X=X_eval,
         features=features_2d,
         kind='average',
         grid_resolution=40, 
-        ax=ax,
         n_jobs=-1,
         n_cols=3,
     )
-    
-    output_filename_2d = Path(PROCESSED_DIR) / "pdp_2d.png"
-    plt.savefig(output_filename_2d, dpi=300, bbox_inches='tight')
+    fig_2d = display_2d.figure_
+    fig_2d.set_size_inches(16, 6)
+    fig_2d.suptitle(
+        'Partial Dependence (2D): Interaction Effects Between GHM, VPD, and NDVI',
+        fontsize=16
+    )
+    output_2d = output_dir / "pdp_2d_interactions.png"
+    fig_2d.savefig(output_2d, dpi=300, bbox_inches='tight')
     plt.close(fig_2d)
     
 def generate_forecast(

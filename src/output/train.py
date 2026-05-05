@@ -176,7 +176,7 @@ def generate_spatial_reliability_map(
     plt.savefig(output_filename, dpi=300)
     print(f"Spatial reliability map successfully exported as {output_filename}")
 
-def generate_partial_dependence_plots(model, X_test, sample_size=10000, random_state=42):
+def generate_partial_dependence_plots(model, X_test):
     """
     Generates 1D and 2D Partial Dependence Plots to visualize feature thresholds 
     and interaction effects.
@@ -184,8 +184,7 @@ def generate_partial_dependence_plots(model, X_test, sample_size=10000, random_s
     output_dir = Path(PROCESSED_DIR)
     
     print("Generating Partial Dependence Plots...")
-    
-    X_eval = X_test
+    X_eval = X_test.sample(n=10000, random_state=42)
         
     features_1d = [
         'ghm', 
@@ -198,7 +197,7 @@ def generate_partial_dependence_plots(model, X_test, sample_size=10000, random_s
         X=X_eval,
         features=features_1d,
         kind='average',
-        grid_resolution=40, 
+        grid_resolution=25, 
         n_jobs=-1,
         n_cols=3,
     )

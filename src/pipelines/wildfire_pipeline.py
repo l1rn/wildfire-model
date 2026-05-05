@@ -217,7 +217,9 @@ class WildfirePipeline:
     
         test_full = test.copy()
         test_full["fire_probability"] = test_probs
-        
+        import joblib
+
+        joblib.dump(self.model, "model.pkl")
         return self.model, test_full
     
     def _evaluate_by_year_type(self, test_df, probs, threshold):

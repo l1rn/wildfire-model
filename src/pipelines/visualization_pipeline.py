@@ -48,33 +48,18 @@ class PreprocessingVisualizationPipeline:
         self.swvl1 = july_2020["swvl1"]
         self.tp = july_2020["tp"] * 1000
         
-    def create_features(self):
-        self.human_related_features = [
-            "ghm", "dist_oil_gas", "pop_density", "cisi"
-        ]
-        self.nature_related_features = [
-            "temp", "dew", "ndvi", "lai", "fpar", "precip", "sm1", "u10", "v10", "peatland"
-        ]
-
-        self.environment_related_features = [
-            "dem", "slope", "landcover"
-        ]
-
-        self.engineered_features = [
-            "vpd",
-            "vpd_ghm_interaction",
-            "vpd_cisi_interaction",
-            "vpd_3m_avg",
-            "temp_ghm_interaction",
-            "temp_cisi_interaction",
-            "temp_precip_interaction",
-            "precip_30p_sum",
-            "wind_slope_synergy",
-            "dew_ghm_interaction",
-            "ndvi_ghm_interaction",
-            "ndvi_vpd_interaction"
-        ]
-    
+    def load_human_variables(self):
+        from src.extract import data_loader
+        cfg = get_cfg()
+        self.ghm = data_loader.load_static_raster(cfg.raw_human_mod)\
+            .squeeze().rio.clip_box(*self.bbox)
+        self.cisi = data_loader.load_static_raster(cfg.raw_cisi)\
+            .squeeze().rio.clip_box(*self.bbox)
+        self.oil_gas = data_loader.load_static_raster(cfg.raw_oil_gas)\
+            .squeeze().rio.clip_box(*self.bbox)
+        self.pop = data_loader.load_static_raster(cfg.raw_pop_density)\
+            .squeeze().rio.clip_box(*self.bbox)
+            
     def load_borders(self):
         import geopandas as gpd
         self.region = gpd.read_file("data/processed/khmao.geojson")
@@ -189,7 +174,53 @@ class PreprocessingVisualizationPipeline:
         plt.savefig(Path(PREPROCESSED_DIR) / "preprocessed_nature_raw.png", dpi=300)
 
     def plot_human_variables(self):
-        pass
+        import matplotlib.pyplot as plt
+        import geopandas as gpd
+        from shapely.geometry import box
+        from pathlib import Path
+        fig, axes = plt.subplots(1, 3, figsize=(20, 4))
+        
+        khmao = gpd.read_file("data/processed/khmao.geojson")
+        khmao = khmao.to_crs("EPSG:4326")
+
+        features = [
+            (self.ghm, "Global Human Modification (gHM)"),
+            (self.cisi, "Critical Infrastructure Spatial Index (CISI)"),
+            (self.pop, "Pop density"),
+            (self.oil_gas, "Oil/Gas Infrastructure Density"),
+        ]
+        
+        for ax, (data_array, title) in zip(axes.flat, features):
+            data = data_array.values
+            lon = data_array.x.values
+            lat = data_array.y.values
+            
+            im = ax.imshow(
+                data,
+                extent=[lon.min(), lon.max(), lat.min(), lat.max()],
+                origin='upper',
+                aspect='auto',
+                cmap='viridis'
+            )
+
+            bbox = box(lon.min(), lat.min(), lon.max(), lat.max())
+            gdf_clipped = khmao.clip(bbox)
+
+            gdf_clipped.boundary.plot(
+                ax=ax,
+                color='red',
+                linewidth=1
+            )
+            ax.set_title(title)
+            ax.set_xlabel("Longitude")
+            ax.set_ylabel("Latitude")
+            plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+        plt.subplots_adjust(wspace=0.05)
+        from src.config import PREPROCESSED_DIR
+        from pathlib import Path
+        plt.savefig(Path(PREPROCESSED_DIR) / "preprocessed_anthoropogenic_raw.png", dpi=300)
+
     def plot_engineered_variables(self):
         pass
         
@@ -197,7 +228,6 @@ class PreprocessingVisualizationPipeline:
         import questionary
         # self.load_df()
         self.load_bbox()
-        self.create_features()
         self.load_borders()
         
         
@@ -210,6 +240,7 @@ class PreprocessingVisualizationPipeline:
             self.load_natural_variables()
             self.plot_natural_variables()
         if "human" in plot_list:
+            self.load_human_variables()
             self.plot_human_variables()
         if "environment" in plot_list:
             self.load_environmental_variables()

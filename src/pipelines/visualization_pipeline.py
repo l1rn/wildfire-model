@@ -178,7 +178,7 @@ class PreprocessingVisualizationPipeline:
         import geopandas as gpd
         from shapely.geometry import box
         from pathlib import Path
-        fig, axes = plt.subplots(1, 3, figsize=(20, 4))
+        fig, axes = plt.subplots(2, 2, figsize=(12, 9))
         
         khmao = gpd.read_file("data/processed/khmao.geojson")
         khmao = khmao.to_crs("EPSG:4326")
@@ -215,8 +215,7 @@ class PreprocessingVisualizationPipeline:
             ax.set_xlabel("Longitude")
             ax.set_ylabel("Latitude")
             plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-
-        plt.subplots_adjust(wspace=0.05)
+        plt.tight_layout()
         from src.config import PREPROCESSED_DIR
         from pathlib import Path
         plt.savefig(Path(PREPROCESSED_DIR) / "preprocessed_anthoropogenic_raw.png", dpi=300)

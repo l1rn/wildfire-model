@@ -12,7 +12,7 @@ def build_xgb(train):
     scale_pos_weight = len(train) / train["fire"].sum()
     return models.get_xgboost(scale_pos_weight) 
 
-dict = {1: "raw", 2: "preprocessing", 3: "extract data", 4: "testing the model", 0: "exit"}
+dict = {1: "raw", 2: "preprocessing", 3: "extract data", 4: "testing the model", 5: "special cases", 0: "exit"}
 
 def show_era5_head():
     from src.config import RAW_DIR
@@ -165,6 +165,15 @@ def execute_cds_era5():
     from src.collection import cds_extractor
     cds_extractor.extract_era5()
     
+def execute_vpd_threshold_map():
+    from src.pipelines import VPDThresholdPipeline
+    from src.extract import data_loader
+    df = data_loader.load_master_dataset()
+
+    ppln = VPDThresholdPipeline(df=df)
+    ppln.run()
+
+
 options = {
 1: {
     1: show_era5_head,
@@ -188,6 +197,9 @@ options = {
     2: wildfire_pipeline,
     3: temperature_pipeline,
     4: eda_execution
+},
+5: {
+    1: execute_vpd_threshold_map
 }}
     
 def choose_option():

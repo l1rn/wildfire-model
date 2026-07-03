@@ -126,7 +126,7 @@ class VPDThresholdPipeline:
         ]
         month_df["vpd_tier"] = np.select(vpd_conds, [1, 2, 3, 4], default=1)
 
-        month_df["interaction_score"] = month_df["ghm"] * month_df["ndvi"]
+        month_df["interaction_score"] = month_df["ghm"] * (month_df["ndvi"] - 1)
         high_interaction_cutoff = month_df["interaction_score"].quantile(0.75)
 
         interaction_condition = month_df["interaction_score"] >= high_interaction_cutoff

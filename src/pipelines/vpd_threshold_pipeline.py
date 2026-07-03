@@ -136,6 +136,7 @@ class VPDThresholdPipeline:
             month_df["vpd_tier"] + 1,
             month_df["vpd_tier"]
         )
+        
         return month_df
     
     def plot_interaction_collage(self, year=2022):

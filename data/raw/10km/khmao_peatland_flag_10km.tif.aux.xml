@@ -1,0 +1,12 @@
+<PAMDataset>
+  <PAMRasterBand band="1">
+    <Description>peatland_flag</Description>
+    <Metadata>
+      <MDI key="STATISTICS_MINIMUM">0</MDI>
+      <MDI key="STATISTICS_MAXIMUM">95.744743486206</MDI>
+      <MDI key="STATISTICS_MEAN">31.340839536945</MDI>
+      <MDI key="STATISTICS_STDDEV">21.800682908536</MDI>
+      <MDI key="STATISTICS_VALID_PERCENT">92.63</MDI>
+    </Metadata>
+  </PAMRasterBand>
+</PAMDataset>

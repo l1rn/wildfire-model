@@ -5,14 +5,13 @@ def main():
     try:
         ans = process_manager.choose_option()
         if ans == 0:
-            sys.exit(0)
-            
+            return 0            
         process_manager.choose_sub_option(ans)
+        return 0;
     except KeyboardInterrupt:
-        print("Interrupted signal by keyboard")
-        sys.exit(1)
+        print("\nInterrupted signal by keyboard")
+        return 1
     finally:
         print("Cleaning processes")
 if __name__ == "__main__":
-    main()
-    sys.exit(1)    
+    sys.exit(main())    
